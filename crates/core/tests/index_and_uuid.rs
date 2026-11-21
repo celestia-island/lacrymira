@@ -191,3 +191,12 @@ fn option_uuid_round_trip() {
     let back_none: Option<uuid::Uuid> = lacrymira::Value::Null.try_into().unwrap();
     assert_eq!(back_none, None);
 }
+
+#[test]
+fn bytes_ref_round_trip() {
+    let b = vec![1u8, 2, 3, 255];
+    let v = lacrymira::Value::from(&b);
+    assert_eq!(v, lacrymira::Value::Bytes(b.clone()));
+    let back: Vec<u8> = v.try_into().unwrap();
+    assert_eq!(back, b);
+}
