@@ -180,14 +180,17 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     });
 
     // JSON marker impls (only for JSON columns)
-    let json_markers = json_columns.iter().map(|_col| {
+    // G15: exactly ONE marker impl when the entity has any JSON column —
+    // one impl per JSON field collided (E0119) for entities with 2+.
+    let json_markers = if json_columns.is_empty() {
+        quote! {}
+    } else {
         quote! {
             impl lacrymira::JsonColumn for Column {
                 fn _json_marker() {}
             }
         }
-    });
-    let _has_json_markers = !json_columns.is_empty();
+    };
 
     // Version marker (only if #[lacrymira(version)] was specified)
     let version_marker = if version_field {
@@ -234,6 +237,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
             use super::*;
 
             /// Column selector — one variant per column of the entity.
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
             pub enum Column {
                 #(
                     #[doc = concat!("The `", #column_names_lit, "` column.")]
@@ -292,7 +296,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 type Value = #pk_type;
             }
 
-            #(#json_markers)*
+            #json_markers
             #version_marker
         }
 

@@ -146,3 +146,45 @@ mod artifact {
 fn non_primitive_field_types_round_trip() {
     artifact::round_trip();
 }
+
+mod multi_json {
+    // G15 regression: 2+ JSONB columns must derive without E0119
+    // (the old macro emitted one `impl JsonColumn for Column` per JSON field).
+    use lacrymira::DeriveEntity;
+    use serde_json::Value as JsonValue;
+
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "audit_events")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: i64,
+        pub before: JsonValue,
+        pub after: JsonValue,
+        pub context: JsonValue,
+    }
+
+    pub use audit_events_entity::Column;
+}
+
+#[test]
+fn multiple_json_columns_derive_cleanly() {
+    use lacrymira::TypedJsonColumnOps;
+    // Three JSON columns — compiles and all json ops available.
+    let cond = multi_json::Column::After.json_get("$.status").eq("done");
+    let _ = cond;
+    // JsonColumn marker present (single impl, no E0119).
+    fn assert_json_marker<T: lacrymira::JsonColumn>() {}
+    assert_json_marker::<multi_json::Column>();
+}
+
+#[test]
+fn column_is_copy() {
+    // G16: derived Column is Copy — condition helpers can hoist freely.
+    fn require_copy<T: Copy>() {}
+    require_copy::<multi_json::Column>();
+    // multi_json::Column covers the derive output shape (same generator).
+    let c = multi_json::Column::Before;
+    let c2 = c; // move
+    let _ = c; // still usable — Copy
+    assert_eq!(c2.name(), "before");
+}
