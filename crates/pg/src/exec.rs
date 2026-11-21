@@ -578,7 +578,7 @@ impl PgExecutor {
         // Build UPDATE SET for all columns except PK and version
         let mut set_parts = Vec::new();
         let mut params: Vec<lacrymira_core::Value> = Vec::new();
-        let mut model_values = self.model_to_values(&model, columns);
+        let mut model_values = E::to_values(&model);
 
         for (i, col) in columns.iter().enumerate() {
             if pk_indices.contains(&i) || i == version_idx {
@@ -669,13 +669,6 @@ impl PgExecutor {
             },
             _ => Ok(0),
         }
-    }
-
-    fn model_to_values<V>(&self, _model: &V, _columns: &[&str]) -> Vec<lacrymira_core::Value> {
-        // This is a placeholder — the full implementation needs the Model
-        // to be serializable to Value array via the Entity trait.
-        // For now, return empty — the save() caller will provide values.
-        Vec::new()
     }
 
     async fn execute_raw(
