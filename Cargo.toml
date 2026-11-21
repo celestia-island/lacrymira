@@ -37,6 +37,9 @@ jiff-sqlx = { version = "^1" }
 # KV
 redb = { version = "^4" }
 
+# uuid
+uuid = { version = "^1", features = ["v4", "serde"] }
+
 # macro infrastructure
 syn = "^2"
 quote = "^1"
