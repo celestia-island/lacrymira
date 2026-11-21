@@ -85,6 +85,13 @@ pub enum Command {
         /// Optional pessimistic lock (FOR UPDATE family).
         lock: Option<crate::lock::LockMode>,
     },
+    /// Count matching rows.
+    Count {
+        /// The table name.
+        table: String,
+        /// Optional filter condition.
+        filter: Option<Condition>,
+    },
     /// Insert rows into a table.
     Insert {
         /// The table name.

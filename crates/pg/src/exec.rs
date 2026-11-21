@@ -128,6 +128,15 @@ impl PgExecutor {
         Ok(Self { pool })
     }
 
+    /// Connect with explicit pool tuning (max connections, timeouts, …).
+    ///
+    /// Use this over [`connect`](Self::connect) when the defaults are wrong —
+    /// e.g. single-connection CLI tools pin `max_connections(1)`.
+    pub async fn connect_with(url: &str, options: PgPoolOptions) -> Result<Self, Error> {
+        let pool = options.connect(url).await.map_err(map_db_error)?;
+        Ok(Self { pool })
+    }
+
     /// Wrap an existing pool (e.g. one shared with [`MigrationRunner`](crate::MigrationRunner)).
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -153,6 +162,15 @@ impl PgExecutor {
             Command::Select { .. } | Command::Insert { .. } | Command::Update { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
                 rows_to_reply(&rows)
+            }
+            // COUNT(*) returns a single row with a single BIGINT column.
+            Command::Count { .. } => {
+                let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+                let count: i64 = rows
+                    .first()
+                    .and_then(|r| r.try_get::<i64, _>("count").ok())
+                    .unwrap_or(0);
+                Ok(Reply::Value(Some(lacrymira::Value::I64(count))))
             }
             // Delete never carries RETURNING in this dialect: report the count.
             Command::Delete { .. } => {

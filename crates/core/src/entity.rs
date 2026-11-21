@@ -42,6 +42,12 @@ pub trait Entity: Sized + Send + Sync + 'static {
     /// The primary-key column indices into `COLUMNS` (empty = no PK).
     const PK_INDICES: &'static [usize];
 
+    /// The index into `COLUMNS` of the `#[lacrymira(version)]` column, if any.
+    ///
+    /// Drives optimistic locking: [`save`](crate::Entity) uses this to build
+    /// the `WHERE version = $expected` guard without guessing column names.
+    const VERSION_INDEX: Option<usize> = None;
+
     /// The read model type (one row).
     type Model: Clone + Send + Sync + 'static;
 

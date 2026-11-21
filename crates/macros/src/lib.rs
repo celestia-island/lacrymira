@@ -87,6 +87,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     let mut pk_indices = Vec::new();
     let mut pk_field_types = Vec::new();
     let mut version_field = false;
+    let mut version_field_index: Option<usize> = None;
     let mut json_columns = Vec::new(); // PascalCase idents of JSON columns
 
     for (idx, field) in fields.iter().enumerate() {
@@ -109,6 +110,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                     col_name = lit.value();
                 } else if meta.path.is_ident("version") {
                     version_field = true;
+                    version_field_index = Some(idx);
                 }
                 Ok(())
             });
@@ -209,6 +211,10 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     };
 
     let field_indices_usize: Vec<usize> = (0..column_count).collect();
+    let version_index_tokens = match version_field_index {
+        Some(i) => quote! { Some(#i) },
+        None => quote! { None },
+    };
     // Only generate TypedJsonColumnOps for entities with JSON columns.
     // Without this, json_get on a text-only entity would be a compile error
     // (trait not in scope) — which is exactly what we want.
@@ -297,6 +303,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
             const COLUMN_COUNT: usize = #column_count;
             const COLUMNS: &'static [&'static str] = &[#(#column_names_lit),*];
             const PK_INDICES: &'static [usize] = &[#(#pk_indices_lit),*];
+            const VERSION_INDEX: Option<usize> = #version_index_tokens;
             type Model = #struct_name;
             type ActiveModel = #module_name::ActiveModel;
             type PrimaryKey = #module_name::PrimaryKeyValue;
