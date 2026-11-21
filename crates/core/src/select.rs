@@ -2,7 +2,6 @@
 
 use crate::condition::Condition;
 use crate::entity::Entity;
-use crate::value::Value;
 
 /// A typed SELECT query on an entity.
 ///

@@ -14,14 +14,17 @@ sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tok
 pgvector = { workspace = true, optional = true, features = ["sqlx"] }
 jiff-sqlx = { workspace = true, optional = true, features = ["postgres"] }
 jiff = { workspace = true }
+uuid = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true, features = ["std"] }
 rmp-serde = { workspace = true }
 tokio = { version = "^1", features = ["rt", "macros"], optional = true }
 thiserror = { workspace = true }
 
 [features]
 default = ["postgres"]
-postgres = ["dep:sqlx", "dep:tokio"]
+postgres = ["dep:sqlx", "dep:tokio", "dep:jiff-sqlx", "dep:serde_json", "dep:futures-util"]
 pgvector = ["postgres", "dep:pgvector"]
 
 [lints]

@@ -24,6 +24,7 @@ lacrymira-macros = { path = "crates/macros", version = "^0.1" }
 # serialization (msgpack everywhere — 2026-11-21 user ruling)
 serde = { version = "^1", features = ["derive"] }
 rmp-serde = "^1"
+serde_json = "^1"
 
 # time (jiff first, chrono opt-in)
 jiff = { version = "^1", features = ["serde"] }
@@ -33,6 +34,7 @@ chrono = { version = "^0.4", default-features = false, features = ["clock", "ser
 sqlx = { version = "^0.9", default-features = false }
 pgvector = { version = "^0.4" }
 jiff-sqlx = { version = "^1" }
+futures-util = { version = "^0.3", default-features = false }
 
 # KV
 redb = { version = "^4" }

@@ -7,5 +7,6 @@ pub mod exec;
 pub mod migrate;
 pub mod render;
 
+pub use exec::PgExecutor;
 pub use migrate::{Migration, MigrationResult, MigrationRunner};
 pub use render::{render, Rendered};

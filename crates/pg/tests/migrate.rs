@@ -159,7 +159,7 @@ async fn bookkeeping_table_matches_sea_orm_format() {
 
 #[test]
 fn migrations_are_sorted_by_version() {
-    let runner = MigrationRunner::new(vec![
+    let _runner = MigrationRunner::new(vec![
         Migration::new("20260102000001", "second", "SELECT 2"),
         Migration::new("20260101000001", "first", "SELECT 1"),
         Migration::new("20260103000001", "third", "SELECT 3"),
