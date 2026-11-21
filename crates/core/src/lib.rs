@@ -8,6 +8,7 @@ pub mod insert_policy;
 pub mod lock;
 pub mod reply;
 pub mod select;
+pub mod typed_condition;
 pub mod value;
 
 pub use command::{Command, ConflictAction, Dialect, KvOp, OnConflict};
@@ -20,4 +21,5 @@ pub use insert_policy::{CollisionPolicy, InsertPolicy, UuidStrategy};
 pub use lock::LockMode;
 pub use reply::Reply;
 pub use select::Select;
+pub use typed_condition::{TypedColumnOps, TypedCondition};
 pub use value::Value;

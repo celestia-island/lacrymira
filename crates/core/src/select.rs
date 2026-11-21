@@ -36,7 +36,13 @@ impl<E: Entity> Select<E> {
     ///
     /// Consumes and returns `Self` for chaining, but the value is the **same
     /// type** — so `q = q.filter(...)` inside an `if` block compiles.
-    pub fn filter(mut self, cond: Condition) -> Self {
+    /// Add a filter condition (AND-combined with any existing filter).
+    ///
+    /// Accepts `TypedCondition<E>` (from Column enum) or `Condition` (escape hatch).
+    /// Column from a different Entity will not compile (type mismatch).
+    pub fn filter(mut self, cond: impl Into<crate::typed_condition::TypedCondition<E>>) -> Self {
+        let typed: crate::typed_condition::TypedCondition<E> = cond.into();
+        let cond = typed.into_inner();
         self.filter = Some(match self.filter.take() {
             Some(existing) => {
                 // Flatten All([...]) chains so .filter(a).filter(b).filter(c)
