@@ -321,3 +321,39 @@ impl TryFrom<Value> for Option<i16> {
         }
     }
 }
+
+/// Conversions between `chrono::DateTime<Utc>` and [`Value`] (RFC3339 wire
+/// form), gated on the opt-in `chrono` feature for callers still on chrono.
+#[cfg(feature = "chrono")]
+impl From<&chrono::DateTime<chrono::Utc>> for Value {
+    fn from(v: &chrono::DateTime<chrono::Utc>) -> Self {
+        Value::Timestamp(v.to_rfc3339())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl TryFrom<Value> for chrono::DateTime<chrono::Utc> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Timestamp(s) | Value::Text(s) => chrono::DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map_err(|_| ()),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl TryFrom<Value> for Option<chrono::DateTime<chrono::Utc>> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Timestamp(s) | Value::Text(s) => chrono::DateTime::parse_from_rfc3339(&s)
+                .map(|dt| Some(dt.with_timezone(&chrono::Utc)))
+                .map_err(|_| ()),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
