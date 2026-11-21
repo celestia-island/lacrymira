@@ -34,6 +34,29 @@ impl Entity for LedgerEntity {
     type Model = LedgerModel;
     type ActiveModel = LedgerModel; // simplified for the pin
     type PrimaryKey = LedgerPk;
+
+    fn to_values(model: &Self::Model) -> Vec<Value> {
+        vec![
+            Value::I64(model.id),
+            Value::Text(model.user_id.clone()),
+            Value::Text(model.entry_type.clone()),
+            Value::Text(model.week_start.clone()),
+            Value::I32(model.degrees),
+        ]
+    }
+
+    fn from_values(values: &[Value]) -> Option<Self::Model> {
+        if values.len() != 5 {
+            return None;
+        }
+        Some(LedgerModel {
+            id: values[0].clone().try_into().ok()?,
+            user_id: values[1].clone().try_into().ok()?,
+            entry_type: values[2].clone().try_into().ok()?,
+            week_start: values[3].clone().try_into().ok()?,
+            degrees: values[4].clone().try_into().ok()?,
+        })
+    }
 }
 
 /// **THE PIN**: `let mut query = ...; if cond { query = query.filter(...); }`

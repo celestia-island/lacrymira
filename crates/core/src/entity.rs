@@ -50,4 +50,11 @@ pub trait Entity: Sized + Send + Sync + 'static {
 
     /// The primary-key type.
     type PrimaryKey: PrimaryKey;
+
+    /// Convert a Model instance into a Vec of column values (declaration order).
+    fn to_values(model: &Self::Model) -> Vec<crate::value::Value>;
+
+    /// Reconstruct a Model from a Vec of column values (declaration order).
+    /// Returns None if the values don't match the expected shape.
+    fn from_values(values: &[crate::value::Value]) -> Option<Self::Model>;
 }

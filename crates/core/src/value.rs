@@ -32,3 +32,67 @@ pub enum Value {
     /// Array of values (for `Vec<T>` columns).
     Array(Vec<Value>),
 }
+
+// ── TryFrom<Value> for common types (used by from_values) ──
+
+impl TryFrom<Value> for i64 {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I64(x) => Ok(x),
+            Value::I32(x) => Ok(x as i64),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for i32 {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I32(x) => Ok(x),
+            Value::I64(x) => Ok(x as i32),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for String {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Text(s) => Ok(s),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for bool {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Bool(b) => Ok(b),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::F64(x) => Ok(x),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Vec<u8> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Bytes(b) => Ok(b),
+            _ => Err(()),
+        }
+    }
+}

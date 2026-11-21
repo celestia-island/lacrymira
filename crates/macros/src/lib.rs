@@ -202,6 +202,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    let field_indices_usize: Vec<usize> = (0..column_count).collect();
     let expanded = quote! {
         // ── Named child module (hygiene boundary) ──
         mod #module_name {
@@ -261,6 +262,22 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
             type Model = #struct_name;
             type ActiveModel = #module_name::ActiveModel;
             type PrimaryKey = #module_name::PrimaryKeyValue;
+
+            fn to_values(model: &Self::Model) -> Vec<lacrymira_core::Value> {
+                use lacrymira_core::Value;
+                vec![
+                    #(Value::from(&model.#field_idents)),*
+                ]
+            }
+
+            fn from_values(values: &[lacrymira_core::Value]) -> Option<Self::Model> {
+                if values.len() != #column_count {
+                    return None;
+                }
+                Some(Self::Model {
+                    #(#field_idents: values[#field_indices_usize].clone().try_into().ok()?),*
+                })
+            }
         }
 
         // ── Optional re-exports ──

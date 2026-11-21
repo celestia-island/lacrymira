@@ -253,3 +253,29 @@ impl From<uuid::Uuid> for Value {
         Value::Uuid(v.to_string())
     }
 }
+
+impl From<&String> for Value {
+    fn from(v: &String) -> Self {
+        Value::Text(v.clone())
+    }
+}
+impl From<&i64> for Value {
+    fn from(v: &i64) -> Self {
+        Value::I64(*v)
+    }
+}
+impl From<&i32> for Value {
+    fn from(v: &i32) -> Self {
+        Value::I32(*v)
+    }
+}
+impl From<&bool> for Value {
+    fn from(v: &bool) -> Self {
+        Value::Bool(*v)
+    }
+}
+impl From<&f64> for Value {
+    fn from(v: &f64) -> Self {
+        Value::F64(*v)
+    }
+}
