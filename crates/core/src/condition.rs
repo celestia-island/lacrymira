@@ -395,3 +395,23 @@ impl From<&Option<i16>> for Value {
         }
     }
 }
+
+#[cfg(feature = "chrono")]
+impl From<&Option<chrono::DateTime<chrono::Utc>>> for Value {
+    fn from(v: &Option<chrono::DateTime<chrono::Utc>>) -> Self {
+        match v {
+            Some(dt) => Value::Timestamp(dt.to_rfc3339()),
+            None => Value::Null,
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<&Option<jiff::Timestamp>> for Value {
+    fn from(v: &Option<jiff::Timestamp>) -> Self {
+        match v {
+            Some(ts) => Value::Timestamp(ts.to_string()),
+            None => Value::Null,
+        }
+    }
+}
