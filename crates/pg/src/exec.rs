@@ -765,3 +765,177 @@ impl PgExecutor {
         }
     }
 }
+
+// ── G7: executor-side find helpers (row decode with column reorder) ──
+
+/// Decode one row into `E::Model` by column NAME (declaration order is
+/// irrelevant — physical order ≠ declaration order in general).
+fn row_to_model<E: lacrymira::Entity>(row: &PgRow) -> Result<E::Model, Error> {
+    use sqlx::Column as _;
+    let columns: Vec<String> = row.columns().iter().map(|c| c.name().to_string()).collect();
+    let mut values: Vec<lacrymira::Value> = Vec::with_capacity(columns.len());
+    for name in &columns {
+        values.push(pg_value_to_value(row, name)?);
+    }
+    // Map physical order → declaration order via E::COLUMNS
+    let mut ordered: Vec<lacrymira::Value> = vec![lacrymira::Value::Null; E::COLUMNS.len()];
+    for (i, name) in columns.iter().enumerate() {
+        if let Some(pos) = E::COLUMNS.iter().position(|c| c == name) {
+            ordered[pos] = values[i].clone();
+        }
+    }
+    E::from_values(&ordered).ok_or_else(|| {
+        Error::Decode(format!(
+            "row does not fit entity {} (columns: {:?})",
+            E::TABLE,
+            columns
+        ))
+    })
+}
+
+fn pg_value_to_value(row: &PgRow, name: &str) -> Result<lacrymira::Value, Error> {
+    // Try common decodes in order; NULL first.
+    if row.try_get::<Option<i64>, _>(name).is_err() {
+        // column exists but type may differ; fallthrough
+    }
+    if let Ok(v) = row.try_get::<Option<i64>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::I64)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<i32>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::I32)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<f64>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::F64)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<bool>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::Bool)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<String>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::Text)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(name) {
+        return Ok(v
+            .map(lacrymira::Value::Bytes)
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    if let Ok(v) = row.try_get::<Option<uuid::Uuid>, _>(name) {
+        return Ok(v
+            .map(|u| lacrymira::Value::Uuid(u.to_string()))
+            .unwrap_or(lacrymira::Value::Null));
+    }
+    Err(Error::Decode(format!(
+        "unsupported column type for {:?}",
+        name
+    )))
+}
+
+impl PgExecutor {
+    /// Fetch all rows matching a [`Select`] as typed models.
+    ///
+    /// Decodes by column NAME and reorders into declaration order, so
+    /// physical column order never has to match the model.
+    pub async fn find_all<E>(&self, select: &lacrymira::Select<E>) -> Result<Vec<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let rendered = render(&select.to_command())?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        rows.iter().map(row_to_model::<E>).collect()
+    }
+
+    /// Fetch the first row matching a [`Select`], if any.
+    pub async fn find_one<E>(
+        &self,
+        select: &lacrymira::Select<E>,
+    ) -> Result<Option<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        Ok(self.find_all(select).await?.into_iter().next())
+    }
+
+    /// Fetch a model by its primary key (single-column PKs only).
+    pub async fn find_by_pk<E>(
+        &self,
+        pk: &<E::PrimaryKey as lacrymira::PrimaryKey>::Value,
+    ) -> Result<Option<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+        <E::PrimaryKey as lacrymira::PrimaryKey>::Value: Into<lacrymira::Value> + Clone,
+    {
+        if E::PK_INDICES.len() != 1 {
+            return Err(Error::Config(
+                "find_by_pk supports single-column PKs; use find_one for composite keys".into(),
+            ));
+        }
+        let col = E::COLUMNS[E::PK_INDICES[0]];
+        let select =
+            lacrymira::Select::<E>::new().filter(lacrymira::ColumnRef::new(col).eq(pk.clone()));
+        self.find_one(&select).await
+    }
+
+    /// Insert a full model and return the stored row as a model.
+    pub async fn insert<E>(&self, model: &E::Model) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let values = E::to_values(model);
+        let cmd = Command::Insert {
+            table: E::TABLE.to_string(),
+            columns: E::COLUMNS.iter().map(|c| c.to_string()).collect(),
+            rows: vec![values],
+            on_conflict: None,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or_else(|| Error::Decode("INSERT returned no row".into()))
+            .and_then(|r| row_to_model::<E>(r))
+    }
+
+    /// Delete rows matching a filter; returns affected count.
+    pub async fn delete<E>(&self, filter: Option<lacrymira::Condition>) -> Result<u64, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        match self
+            .execute(&Command::Delete {
+                table: E::TABLE.to_string(),
+                filter,
+            })
+            .await?
+        {
+            Reply::Affected(n) => Ok(n),
+            _ => Ok(0),
+        }
+    }
+
+    /// Count rows matching a filter.
+    pub async fn count<E>(&self, filter: Option<lacrymira::Condition>) -> Result<i64, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        match self
+            .execute(&Command::Count {
+                table: E::TABLE.to_string(),
+                filter,
+            })
+            .await?
+        {
+            Reply::Value(Some(lacrymira::Value::I64(n))) => Ok(n),
+            _ => Ok(0),
+        }
+    }
+}
