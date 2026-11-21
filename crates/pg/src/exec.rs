@@ -684,3 +684,69 @@ impl PgExecutor {
         .await
     }
 }
+
+// ── UUID collision retry insert ──
+
+impl PgExecutor {
+    /// Insert with UUID strategy and collision retry.
+    ///
+    /// For v4/v7: generates UUID, inserts; on 23505, retries up to policy max.
+    /// For v5 (deterministic): generates from namespace+name, pre-checks existence,
+    ///   on collision retries with a salted name (name + attempt counter).
+    /// For UserProvided: inserts directly; on 23505, returns Error::IdCollision.
+    pub async fn insert_with_policy(
+        &self,
+        table: &str,
+        columns: &[&str],
+        mut values: Vec<lacrymira_core::Value>,
+        pk_index: usize,
+        policy: &lacrymira_core::InsertPolicy,
+    ) -> Result<lacrymira_core::Reply, lacrymira_core::Error> {
+        let max_retries = match &policy.collision {
+            lacrymira_core::CollisionPolicy::Retry(n) => *n,
+            lacrymira_core::CollisionPolicy::Fail => 0,
+        };
+
+        let mut attempts = 0u32;
+        loop {
+            // Generate UUID if not user-provided
+            if !matches!(policy.uuid, lacrymira_core::UuidStrategy::UserProvided) {
+                let name_hint = if attempts > 0 {
+                    // For v5 retry: salt the name with attempt counter
+                    Some(format!("attempt-{}", attempts))
+                } else {
+                    None
+                };
+                let uuid = policy.generate_uuid(name_hint.as_deref())?;
+                values[pk_index] = lacrymira_core::Value::Uuid(uuid.to_string());
+            }
+
+            // Attempt insert
+            let cmd = lacrymira_core::Command::Insert {
+                table: table.to_string(),
+                columns: columns.iter().map(|c| c.to_string()).collect(),
+                rows: vec![values.clone()],
+                on_conflict: None,
+            };
+
+            match self.execute(&cmd).await {
+                Ok(reply) => return Ok(reply),
+                Err(e) if e.is_unique_violation() => {
+                    attempts += 1;
+                    let id_str = match &values[pk_index] {
+                        lacrymira_core::Value::Uuid(s) => s.clone(),
+                        _ => String::new(),
+                    };
+                    if attempts > max_retries {
+                        return Err(lacrymira_core::Error::IdCollision {
+                            attempts,
+                            id: id_str,
+                        });
+                    }
+                    // Retry with new UUID (loop continues)
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}

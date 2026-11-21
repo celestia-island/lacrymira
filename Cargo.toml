@@ -40,7 +40,7 @@ futures-util = { version = "^0.3", default-features = false }
 redb = { version = "^4" }
 
 # uuid
-uuid = { version = "^1", features = ["v4", "serde"] }
+uuid = { version = "^1", features = ["v4", "v5", "serde"] }
 
 # macro infrastructure
 syn = "^2"
