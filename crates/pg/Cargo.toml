@@ -31,5 +31,6 @@ pgvector = ["postgres", "dep:pgvector"]
 workspace = true
 
 [dev-dependencies]
+lacrymira-macros = { path = "../macros" }
 tokio = { version = "^1", features = ["rt", "macros", "rt-multi-thread"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }

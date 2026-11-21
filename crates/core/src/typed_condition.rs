@@ -136,3 +136,67 @@ pub trait TypedColumnOps: Sized {
         TypedCondition::from_inner(self.to_ref().not_between(low, high))
     }
 }
+
+// ── JSONB compile-time restriction ──
+// TypedJsonColumnOps is only implemented for entities that HAVE JSON columns.
+// Entities without any serde_json::Value field → json methods unavailable at compile time.
+
+/// JSONB path operations, only available on entities with JSON columns.
+///
+/// The derive macro generates `impl TypedJsonColumnOps for Column` **only when
+/// the entity has at least one `serde_json::Value` field**. On entities without
+/// JSON columns, calling `.json_get()` is a compile error (trait not in scope).
+pub trait TypedJsonColumnOps: TypedColumnOps {
+    /// `col->path = value` (JSONB path extraction equality)
+    fn json_get(self, path: impl Into<String>) -> JsonPathTyped<Self::Entity> {
+        JsonPathTyped {
+            column: self.to_ref(),
+            path: path.into(),
+            _marker: PhantomData,
+        }
+    }
+
+    /// `col ? path` (JSONB key/path existence)
+    fn json_exists(self, path: impl Into<String>) -> TypedCondition<Self::Entity> {
+        TypedCondition::from_inner(self.to_ref().json_exists(path))
+    }
+
+    /// `col @> value` (JSONB containment)
+    fn json_contains(self, v: serde_json::Value) -> TypedCondition<Self::Entity> {
+        TypedCondition::from_inner(self.to_ref().json_contains(v))
+    }
+
+    /// `jsonb_path_match(col, path, vars)` (PostgreSQL 12+)
+    fn jsonb_path_match(
+        self,
+        path: impl Into<String>,
+        vars: serde_json::Value,
+    ) -> TypedCondition<Self::Entity> {
+        TypedCondition::from_inner(self.to_ref().jsonb_path_match(path, vars))
+    }
+}
+
+/// Builder for `col->path` comparisons (returned by `json_get`).
+pub struct JsonPathTyped<E: Entity> {
+    column: ColumnRef,
+    path: String,
+    _marker: PhantomData<fn() -> E>,
+}
+
+impl<E: Entity> JsonPathTyped<E> {
+    /// `col->path = value`
+    pub fn eq<V: Into<Value>>(self, v: V) -> TypedCondition<E> {
+        TypedCondition::from_inner(crate::condition::Condition::JsonGetEq(
+            self.column,
+            self.path,
+            v.into(),
+        ))
+    }
+
+    /// `col->path != value`
+    pub fn ne<V: Into<Value>>(self, v: V) -> TypedCondition<E> {
+        TypedCondition::from_inner(crate::condition::Condition::Not(Box::new(
+            crate::condition::Condition::JsonGetEq(self.column, self.path, v.into()),
+        )))
+    }
+}

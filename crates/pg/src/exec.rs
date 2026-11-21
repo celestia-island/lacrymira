@@ -548,7 +548,7 @@ impl PgExecutor {
     /// Returns `Error::VersionConflict` if another writer updated the row first.
     pub async fn save<E>(&self, model: E::Model) -> Result<E::Model, lacrymira_core::Error>
     where
-        E: lacrymira_core::Entity + lacrymira_core::VersionColumn,
+        E: lacrymira_core::Entity,
     {
         use lacrymira_core::Entity;
 

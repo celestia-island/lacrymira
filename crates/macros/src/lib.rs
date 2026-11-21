@@ -203,6 +203,16 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     };
 
     let field_indices_usize: Vec<usize> = (0..column_count).collect();
+    // Only generate TypedJsonColumnOps for entities with JSON columns.
+    // Without this, json_get on a text-only entity would be a compile error
+    // (trait not in scope) — which is exactly what we want.
+    let json_ops_impl = if !json_columns.is_empty() {
+        quote! {
+            impl lacrymira_core::TypedJsonColumnOps for Column {}
+        }
+    } else {
+        quote! {}
+    };
     let expanded = quote! {
         // ── Named child module (hygiene boundary) ──
         mod #module_name {
@@ -228,6 +238,8 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                     self.name()
                 }
             }
+
+            #json_ops_impl
 
             impl From<Column> for lacrymira_core::ColumnRef {
                 fn from(c: Column) -> Self {

@@ -279,3 +279,9 @@ impl From<&f64> for Value {
         Value::F64(*v)
     }
 }
+
+impl From<&serde_json::Value> for Value {
+    fn from(v: &serde_json::Value) -> Self {
+        Value::Json(v.to_string())
+    }
+}

@@ -96,3 +96,13 @@ impl TryFrom<Value> for Vec<u8> {
         }
     }
 }
+
+impl TryFrom<Value> for serde_json::Value {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Json(s) => serde_json::from_str(&s).map_err(|_| ()),
+            _ => Err(()),
+        }
+    }
+}

@@ -21,5 +21,5 @@ pub use insert_policy::{CollisionPolicy, InsertPolicy, UuidStrategy};
 pub use lock::LockMode;
 pub use reply::Reply;
 pub use select::Select;
-pub use typed_condition::{TypedColumnOps, TypedCondition};
+pub use typed_condition::{JsonPathTyped, TypedColumnOps, TypedCondition, TypedJsonColumnOps};
 pub use value::Value;
