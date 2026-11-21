@@ -1,0 +1,22 @@
+[package]
+name = "lacrymira-wasi"
+description = "WASI component bindings for lacrymira — wit world + import glue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+lacrymira-core = { workspace = true }
+serde = { workspace = true }
+rmp-serde = { workspace = true }
+wit-bindgen = { version = "^0.57", optional = true, features = ["macros"] }
+
+[features]
+default = ["wit"]
+wit = ["dep:wit-bindgen"]
+
+[lints]
+workspace = true
