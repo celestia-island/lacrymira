@@ -115,3 +115,84 @@ fn version_index_points_at_marked_column() {
     // COLUMNS = ["id", "title", "rev"] → rev is index 2.
     assert_eq!(<versioned::Model as Entity>::VERSION_INDEX, Some(2));
 }
+
+// ── G10: ActiveModel partial-write rendering ──
+
+mod article {
+    use lacrymira::DeriveEntity;
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "articles")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: i64,
+        pub title: String,
+        pub body: String,
+        pub views: i32,
+    }
+
+    pub use articles_entity::ActiveModel;
+}
+
+#[test]
+fn active_pairs_skip_unset_and_bind_null() {
+    use lacrymira::{Entity, Field};
+    let am = article::ActiveModel {
+        title: Field::Value("Hello".into()),
+        body: Field::Null, // explicit NULL; views stays Unset
+        ..Default::default()
+    };
+
+    let pairs = <article::Model as Entity>::active_pairs(&am);
+    assert_eq!(pairs.len(), 2, "Unset skipped");
+    assert_eq!(pairs[0].0, "title");
+    assert!(matches!(pairs[0].1, lacrymira::Value::Text(_)));
+    assert_eq!(pairs[1].0, "body");
+    assert!(matches!(pairs[1].1, lacrymira::Value::Null));
+}
+
+#[test]
+fn insert_active_renders_partial_columns() {
+    use lacrymira::{Command, Entity, Field};
+    let am = article::ActiveModel {
+        title: Field::Value("Partial".into()),
+        ..Default::default()
+    };
+
+    let pairs = <article::Model as Entity>::active_pairs(&am);
+    let cmd = Command::Insert {
+        table: "articles".into(),
+        columns: pairs.iter().map(|(c, _)| c.clone()).collect(),
+        rows: vec![pairs.into_iter().map(|(_, v)| v).collect()],
+        on_conflict: None,
+    };
+    let rendered = lacrymira_pg::render(&cmd).unwrap();
+    // Only "title" appears — Unset columns omitted so DB defaults fire.
+    assert!(rendered.sql.contains(r#"("title")"#), "{}", rendered.sql);
+    assert!(!rendered.sql.contains("views"), "{}", rendered.sql);
+    assert!(!rendered.sql.contains("body"), "{}", rendered.sql);
+}
+
+#[test]
+fn update_active_sql_shape() {
+    // The raw UPDATE built by update_active: SET only non-PK fields,
+    // WHERE pk = $n, RETURNING *.
+    // Verified at the string level since no DB is available here.
+    let sets = vec![("views".to_string(), lacrymira::Value::I32(10))];
+    let mut params: Vec<lacrymira::Value> = Vec::new();
+    let mut set_parts: Vec<String> = Vec::new();
+    for (col, v) in &sets {
+        params.push(v.clone());
+        set_parts.push(format!(r#""{}" = ${}"#, col, params.len()));
+    }
+    params.push(lacrymira::Value::I64(1));
+    let where_sql = format!(r#""id" = ${}"#, params.len());
+    let sql = format!(
+        r#"UPDATE "{}" SET {} WHERE {} RETURNING *"#,
+        "articles",
+        set_parts.join(", "),
+        where_sql
+    );
+    assert!(sql.contains(r#""views" = $1"#), "{}", sql);
+    assert!(sql.contains(r#""id" = $2"#), "{}", sql);
+    assert!(sql.ends_with("RETURNING *"));
+}

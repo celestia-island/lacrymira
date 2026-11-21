@@ -63,4 +63,11 @@ pub trait Entity: Sized + Send + Sync + 'static {
     /// Reconstruct a Model from a Vec of column values (declaration order).
     /// Returns None if the values don't match the expected shape.
     fn from_values(values: &[crate::value::Value]) -> Option<Self::Model>;
+
+    /// Column/value pairs for the SET fields of an ActiveModel.
+    ///
+    /// `Field::Unset` is skipped (DB defaults fire); `Field::Value(v)` binds
+    /// v; `Field::Null` binds SQL NULL. Used by `insert_active` /
+    /// `update_active` for partial writes.
+    fn active_pairs(active: &Self::ActiveModel) -> Vec<(String, crate::value::Value)>;
 }
