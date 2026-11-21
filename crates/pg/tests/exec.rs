@@ -81,6 +81,7 @@ fn select(table: &str) -> Command {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     }
 }
 
@@ -260,6 +261,7 @@ async fn crud_round_trip() {
         order_by: vec![("label".into(), false)],
         limit: None,
         offset: None,
+        lock: None,
     };
 
     let (_, rows) = unpack(
@@ -316,6 +318,7 @@ async fn crud_round_trip() {
         order_by: vec![("label".into(), false)],
         limit: Some(1),
         offset: Some(1),
+        lock: None,
     };
     let (_, rows) = unpack(x.execute(&limited).await.expect("limit select"));
     assert_eq!(rows.len(), 1);

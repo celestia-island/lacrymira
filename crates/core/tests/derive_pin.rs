@@ -1,10 +1,6 @@
-//! Tests for the #[derive(Entity)] macro.
-
-use lacrymira_core::{Command, Condition as _, Entity as _, PrimaryKey as _, Select};
-use lacrymira_macros::Entity as DeriveEntity;
+//! Tests for the #[derive(Entity)] macro with hygienic child modules.
 
 mod ledger {
-    use lacrymira_core::{ColumnRef, Command, Entity, Select};
     use lacrymira_macros::Entity as DeriveEntity;
 
     #[derive(Debug, Clone, PartialEq, DeriveEntity)]
@@ -19,6 +15,7 @@ mod ledger {
     }
 
     pub fn check_metadata() {
+        use lacrymira_core::Entity;
         assert_eq!(<Model as Entity>::TABLE, "billing_ledger");
         assert_eq!(<Model as Entity>::SCHEMA, "public");
         assert_eq!(<Model as Entity>::COLUMN_COUNT, 4);
@@ -30,9 +27,12 @@ mod ledger {
     }
 
     pub fn check_column_rename() {
-        assert_eq!(Column::EntryType.name(), "entry_type");
-        assert_eq!(Column::Id.name(), "id");
-        assert_eq!(Column::ALL.len(), 4);
+        assert_eq!(
+            billing_ledger_entity::Column::EntryType.name(),
+            "entry_type"
+        );
+        assert_eq!(billing_ledger_entity::Column::Id.name(), "id");
+        assert_eq!(billing_ledger_entity::Column::ALL.len(), 4);
     }
 
     pub fn check_active_model() {
@@ -42,27 +42,28 @@ mod ledger {
             entry_type: "grant".into(),
             degrees: 100,
         };
-        let a = ActiveModel::from(m);
+        let a = billing_ledger_entity::ActiveModel::from(m);
         assert_eq!(a.id.value(), Some(&1));
         assert_eq!(a.degrees.value(), Some(&100));
 
-        let d = ActiveModel::default();
+        let d = billing_ledger_entity::ActiveModel::default();
         assert!(!d.id.is_set());
         assert!(!d.entry_type.is_set());
     }
 
     pub fn check_select() {
+        use lacrymira_core::{ColumnRef, Command, Select};
         let q = Select::<Model>::new()
             .filter(ColumnRef::new("user_id").eq("test"))
             .limit(10);
         let cmd = q.to_command();
-        assert!(matches!(cmd, Command::Select { table, limit: Some(10), .. }
-            if table == "billing_ledger"));
+        assert!(
+            matches!(cmd, Command::Select { table, limit: Some(10), .. } if table == "billing_ledger")
+        );
     }
 }
 
 mod org_member {
-    use lacrymira_core::Entity;
     use lacrymira_macros::Entity as DeriveEntity;
 
     #[derive(Debug, Clone, PartialEq, DeriveEntity)]
@@ -76,6 +77,7 @@ mod org_member {
     }
 
     pub fn check_composite_pk() {
+        use lacrymira_core::Entity;
         assert_eq!(<Model as Entity>::TABLE, "org_members");
         assert_eq!(<Model as Entity>::SCHEMA, "billing");
         assert_eq!(<Model as Entity>::PK_INDICES, &[0, 1]);

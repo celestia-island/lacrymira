@@ -178,6 +178,7 @@ fn non_kv_command_rejected() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     assert!(s.execute(&cmd).is_err());
 }

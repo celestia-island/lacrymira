@@ -64,6 +64,7 @@ fn command_select_round_trips() {
             order_by: vec![("week_start".into(), true)],
             limit: Some(10),
             offset: None,
+            lock: None,
         },
     );
 }
@@ -255,6 +256,7 @@ fn msgpack_encoding_is_deterministic() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     let a = rmp_serde::to_vec(&cmd).unwrap();
     let b = rmp_serde::to_vec(&cmd).unwrap();

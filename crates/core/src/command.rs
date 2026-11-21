@@ -66,6 +66,8 @@ pub enum Command {
         limit: Option<u64>,
         /// OFFSET.
         offset: Option<u64>,
+        /// Optional pessimistic lock (FOR UPDATE family).
+        lock: Option<crate::lock::LockMode>,
     },
     /// Insert rows into a table.
     Insert {

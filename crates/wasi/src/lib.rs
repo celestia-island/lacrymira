@@ -128,6 +128,16 @@ impl From<Error> for ErrorInfo {
                 message,
                 sqlstate: None,
             },
+            Error::VersionConflict { expected, actual } => ErrorInfo {
+                kind: "err:version_conflict".into(),
+                message: format!("expected {expected}, actual {actual}"),
+                sqlstate: None,
+            },
+            Error::IdCollision { attempts, id } => ErrorInfo {
+                kind: "err:id_collision".into(),
+                message: format!("{attempts} attempts, id: {id}"),
+                sqlstate: None,
+            },
         }
     }
 }

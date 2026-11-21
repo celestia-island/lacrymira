@@ -11,6 +11,7 @@ fn select_no_filter() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     let r = render(&cmd).unwrap();
     assert_eq!(r.sql, r#"SELECT * FROM "users""#);
@@ -31,6 +32,7 @@ fn select_with_filter_order_limit() {
         order_by: vec![("week_start".into(), true)],
         limit: Some(10),
         offset: Some(20),
+        lock: None,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""user_id" = $1"#), "got: {}", r.sql);
@@ -82,6 +84,7 @@ fn select_all_18_operators() {
             order_by: vec![],
             limit: None,
             offset: None,
+            lock: None,
         };
         let r = render(&cmd).unwrap();
         assert!(
@@ -191,6 +194,7 @@ fn nested_or_and() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -208,6 +212,7 @@ fn null_equality_becomes_is_null() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""x" IS NULL"#), "got: {}", r.sql);
@@ -221,6 +226,7 @@ fn identifier_quoting_escapes_embedded_quotes() {
         order_by: vec![],
         limit: None,
         offset: None,
+        lock: None,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""weird""table""#), "got: {}", r.sql);

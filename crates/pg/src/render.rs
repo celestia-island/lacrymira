@@ -25,6 +25,7 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira_core::Error> {
             order_by,
             limit,
             offset,
+            lock: lock_request,
         } => {
             let mut sql = format!("SELECT * FROM {}", quote_ident(table));
             if let Some(cond) = filter {
@@ -169,6 +170,15 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira_core::Error> {
 }
 
 /// Quote an identifier (double quotes, escape embedded quotes).
+fn json_path_to_sql(path: &str) -> String {
+    path.trim_start_matches('$')
+        .trim_start_matches('.')
+        .split('.')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("'->'")
+}
+
 fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
@@ -213,6 +223,37 @@ impl RenderCtx {
                 Ok(format!(
                     "{} != ANY(${})",
                     quote_ident(&col.name),
+                    self.params.len()
+                ))
+            }
+            Condition::JsonGetEq(col, path, v) => {
+                self.bind(v.clone());
+                let path_lit = json_path_to_sql(path);
+                Ok(format!(
+                    "{}->>'{}' = ${}",
+                    quote_ident(&col.name),
+                    path_lit,
+                    self.params.len()
+                ))
+            }
+            Condition::JsonExists(col, path) => {
+                Ok(format!("{} ? '{}'", quote_ident(&col.name), path))
+            }
+            Condition::JsonContains(col, v) => {
+                self.bind(v.clone());
+                Ok(format!(
+                    "{} @> ${}::jsonb",
+                    quote_ident(&col.name),
+                    self.params.len()
+                ))
+            }
+            Condition::JsonbPathMatch(col, path, vars) => {
+                self.bind(Value::Text(path.clone()));
+                self.bind(vars.clone());
+                Ok(format!(
+                    "jsonb_path_match({}, ${}, ${}::jsonb)",
+                    quote_ident(&col.name),
+                    self.params.len() - 1,
                     self.params.len()
                 ))
             }

@@ -45,6 +45,14 @@ pub enum Condition {
     NotIn(ColumnRef, Vec<Value>),
     /// Raw SQL with bound parameters (escape hatch).
     Raw(String, Vec<Value>),
+    /// `col->path = value` (JSONB path extraction equality)
+    JsonGetEq(ColumnRef, String, Value),
+    /// `col ? path` (JSONB path/key existence)
+    JsonExists(ColumnRef, String),
+    /// `col @> value` (JSONB containment)
+    JsonContains(ColumnRef, Value),
+    /// `jsonb_path_match(col, path, vars)` (PostgreSQL 12+ JSONB path query)
+    JsonbPathMatch(ColumnRef, String, Value),
     /// All sub-conditions must hold (AND).
     All(Vec<Condition>),
     /// At least one sub-condition must hold (OR).
@@ -154,6 +162,52 @@ impl ColumnRef {
             format!("{} && ${{}}", self.name),
             vec![Value::Array(values)],
         )
+    }
+
+    // ── JSONB path operators ──
+
+    /// `col->path = value` (extract JSONB path and compare)
+    pub fn json_get(self, path: impl Into<String>) -> JsonPathBuilder {
+        JsonPathBuilder {
+            column: self,
+            path: path.into(),
+        }
+    }
+
+    /// `col ? path` (check if JSONB key/path exists)
+    pub fn json_exists(self, path: impl Into<String>) -> Condition {
+        Condition::JsonExists(self, path.into())
+    }
+
+    /// `col @> value` (JSONB containment: does col contain this subset?)
+    pub fn json_contains(self, v: serde_json::Value) -> Condition {
+        Condition::JsonContains(self, Value::Json(v.to_string()))
+    }
+
+    /// `jsonb_path_match(col, path, vars)` (PostgreSQL 12+ JSONB path query)
+    pub fn jsonb_path_match(self, path: impl Into<String>, vars: serde_json::Value) -> Condition {
+        Condition::JsonbPathMatch(self, path.into(), Value::Json(vars.to_string()))
+    }
+}
+
+/// Builder for `col->path` comparisons (returned by `json_get`).
+pub struct JsonPathBuilder {
+    column: ColumnRef,
+    path: String,
+}
+
+impl JsonPathBuilder {
+    /// `col->path = value`
+    pub fn eq<V: Into<Value>>(self, v: V) -> Condition {
+        Condition::JsonGetEq(self.column, self.path, v.into())
+    }
+    /// `col->path != value`
+    pub fn ne<V: Into<Value>>(self, v: V) -> Condition {
+        Condition::Not(Box::new(Condition::JsonGetEq(
+            self.column,
+            self.path,
+            v.into(),
+        )))
     }
 }
 

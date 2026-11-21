@@ -28,6 +28,22 @@ pub enum Error {
     /// A configuration or usage error.
     #[error("configuration error: {0}")]
     Config(String),
+    /// Optimistic-lock version conflict: another writer updated the row first.
+    #[error("version conflict: expected {expected}, but current is {actual}")]
+    VersionConflict {
+        /// The version the caller read.
+        expected: i64,
+        /// The version actually in the database.
+        actual: i64,
+    },
+    /// UUID collision after exhausting retry attempts.
+    #[error("UUID collision after {attempts} attempts: {id}")]
+    IdCollision {
+        /// Number of retry attempts made.
+        attempts: u32,
+        /// The colliding ID.
+        id: String,
+    },
 }
 
 impl Error {

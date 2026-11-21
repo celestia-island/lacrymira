@@ -1,4 +1,17 @@
-//! The entity trait: table metadata for typed CRUD.
+//! The entity trait and column marker traits.
+
+/// Marker trait: this column holds JSON data (`serde_json::Value`).
+/// Only columns with this marker have `json_get`/`json_exists` etc.
+pub trait JsonColumn {
+    #[doc(hidden)]
+    fn _json_marker() {}
+}
+
+/// Marker trait: this column is a version counter for optimistic locking.
+pub trait VersionColumn {
+    #[doc(hidden)]
+    fn _version_marker() {}
+}
 
 /// A column reference within an entity.
 pub trait ColumnTrait {

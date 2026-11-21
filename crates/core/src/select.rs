@@ -14,7 +14,7 @@ pub struct Select<E: Entity> {
     orders: Vec<(String, bool)>, // (column, is_desc)
     limit: Option<u64>,
     offset: Option<u64>,
-    for_update: bool,
+    lock_mode: Option<crate::lock::LockMode>,
     _marker: std::marker::PhantomData<fn() -> E>,
 }
 
@@ -27,7 +27,7 @@ impl<E: Entity> Select<E> {
             orders: Vec::new(),
             limit: None,
             offset: None,
-            for_update: false,
+            lock_mode: None,
             _marker: std::marker::PhantomData,
         }
     }
@@ -86,9 +86,9 @@ impl<E: Entity> Select<E> {
         self
     }
 
-    /// Add FOR UPDATE (row lock).
-    pub fn for_update(mut self) -> Self {
-        self.for_update = true;
+    /// Set a pessimistic lock mode (FOR UPDATE family).
+    pub fn lock(mut self, mode: crate::lock::LockMode) -> Self {
+        self.lock_mode = Some(mode);
         self
     }
 
@@ -100,6 +100,7 @@ impl<E: Entity> Select<E> {
             order_by: self.orders.clone(),
             limit: self.limit,
             offset: self.offset,
+            lock: self.lock_mode,
         }
     }
 }

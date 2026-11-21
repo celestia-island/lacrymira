@@ -60,6 +60,7 @@ fn mock_host_executor_sees_identical_command_and_replies() {
         order_by: vec![("week_start".into(), true)],
         limit: Some(10),
         offset: None,
+        lock: None,
     };
     let expected = Reply::Rows {
         columns: vec!["week_start".into(), "total".into()],
