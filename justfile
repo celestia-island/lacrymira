@@ -33,7 +33,7 @@ wasi:
 
 # Verify the wit world compiles.
 wit-check:
-    @test -f wit/lacrymira.wit && echo "wit world present" || (echo "missing wit/lacrymira.wit" && exit 1)
+    @test -f crates/wasi/wit/lacrymira.wit && echo "wit world present" || (echo "missing crates/wasi/wit/lacrymira.wit" && exit 1)
 
 # Verify zero tokio in the WASI tree.
 tokio-check:
