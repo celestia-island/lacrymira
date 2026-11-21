@@ -4,6 +4,8 @@
 //! SQL and executes via sqlx.
 
 pub mod exec;
+pub mod migrate;
 pub mod render;
 
+pub use migrate::{Migration, MigrationResult, MigrationRunner};
 pub use render::{render, Rendered};
