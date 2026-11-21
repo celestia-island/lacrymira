@@ -1,13 +1,17 @@
 //! Index drift check: compare declared IndexSpec against pg_indexes.
 
-use lacrymira_core::{Error, IndexSpec};
+use lacrymira_core::IndexSpec;
 
 /// An index as it exists in the database (parsed from pg_indexes).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DbIndex {
+    /// Index name as created in the database.
     pub name: String,
+    /// Table the index belongs to.
     pub table: String,
+    /// Whether the index is unique.
     pub unique: bool,
+    /// Full `CREATE INDEX` definition from `pg_indexes`.
     pub definition: String,
 }
 

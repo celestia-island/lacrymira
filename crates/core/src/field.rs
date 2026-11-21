@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 
 /// A field in an `ActiveModel`: either untouched, set to a value, or
 /// explicitly set to NULL (which is different from untouched).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum Field<T> {
     /// Not set — the column is omitted from INSERT/UPDATE.
+    #[default]
     Unset,
     /// Set to a value.
     Value(T),
@@ -32,11 +33,5 @@ impl<T> Field<T> {
 impl<T> From<T> for Field<T> {
     fn from(v: T) -> Self {
         Field::Value(v)
-    }
-}
-
-impl<T> Default for Field<T> {
-    fn default() -> Self {
-        Field::Unset
     }
 }

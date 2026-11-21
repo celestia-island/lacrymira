@@ -19,21 +19,37 @@ pub enum Dialect {
 /// The KV operation for `Command::Kv`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum KvOp {
-    /// Get a value by key.
-    Get { key: Value },
-    /// Set a value (upsert).
-    Set { key: Value, value: Value },
-    /// Delete by key.
-    Delete { key: Value },
+    /// Get a single value by key.
+    Get {
+        /// The key to read.
+        key: Value,
+    },
+    /// Set a value, overwriting any existing value.
+    Set {
+        /// The key to write.
+        key: Value,
+        /// The value to store.
+        value: Value,
+    },
+    /// Delete a key.
+    Delete {
+        /// The key to remove.
+        key: Value,
+    },
     /// Scan a range of keys.
     Scan {
+        /// Scan start key (inclusive); `None` = from the beginning.
         start: Option<Value>,
+        /// Scan end key (exclusive); `None` = to the end.
         end: Option<Value>,
+        /// Maximum number of entries to return.
         limit: Option<u64>,
     },
     /// Count entries in a range.
     Count {
+        /// Count start key (inclusive); `None` = from the beginning.
         start: Option<Value>,
+        /// Count end key (exclusive); `None` = to the end.
         end: Option<Value>,
     },
 }
@@ -120,5 +136,9 @@ pub enum ConflictAction {
     /// Do nothing (skip the row).
     DoNothing,
     /// Update the listed columns from EXCLUDED.
-    DoUpdate { set: Vec<(String, Value)> },
+    /// Update the conflicting row with the given column-value pairs.
+    DoUpdate {
+        /// The column-value pairs to set on conflict.
+        set: Vec<(String, Value)>,
+    },
 }

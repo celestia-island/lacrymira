@@ -44,8 +44,8 @@ impl<E: Entity> TypedCondition<E> {
         TypedCondition::from_inner(self.inner.or(other.inner))
     }
 
-    /// Negate.
-    pub fn not(self) -> TypedCondition<E> {
+    /// Negate this condition (logical NOT).
+    pub fn negate(self) -> TypedCondition<E> {
         TypedCondition::from_inner(Condition::Not(Box::new(self.inner)))
     }
 }
@@ -84,54 +84,73 @@ pub trait TypedColumnOps: Sized {
 
     // ── 18 comparison operators ──
 
+    /// Column equals value.
     fn eq<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().eq(v))
     }
+    /// Column not-equals value.
     fn ne<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().ne(v))
     }
+    /// Column less-than value.
     fn lt<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().lt(v))
     }
+    /// Column less-than-or-equal value.
     fn lte<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().lte(v))
     }
+    /// Column greater-than value.
     fn gt<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().gt(v))
     }
+    /// Column greater-than-or-equal value.
     fn gte<V: Into<Value>>(self, v: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().gte(v))
     }
+    /// Column is NULL.
+    #[allow(clippy::wrong_self_convention)]
     fn is_null(self) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().is_null())
     }
+    /// Column is not NULL.
+    #[allow(clippy::wrong_self_convention)]
     fn is_not_null(self) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().is_not_null())
     }
+    /// Column value is in the given list (renders as `= ANY($n)`).
     fn in_<V: Into<Value>>(self, values: Vec<V>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().in_(values))
     }
+    /// Column value is not in the given list.
     fn not_in<V: Into<Value>>(self, values: Vec<V>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().not_in(values))
     }
+    /// Column matches a LIKE pattern (case-sensitive).
     fn like(self, pattern: impl Into<String>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().like(pattern))
     }
+    /// Column matches an ILIKE pattern (case-insensitive, PostgreSQL).
     fn ilike(self, pattern: impl Into<String>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().ilike(pattern))
     }
+    /// Column contains the given substring.
     fn contains(self, substr: impl Into<String>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().contains(substr))
     }
+    /// Column starts with the given prefix.
     fn starts_with(self, prefix: impl Into<String>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().starts_with(prefix))
     }
+    /// Column ends with the given suffix.
     fn ends_with(self, suffix: impl Into<String>) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().ends_with(suffix))
     }
+    /// Column value is between low and high (inclusive).
     fn between<V: Into<Value>>(self, low: V, high: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().between(low, high))
     }
+    /// Column value is not between low and high.
     fn not_between<V: Into<Value>>(self, low: V, high: V) -> TypedCondition<Self::Entity> {
         TypedCondition::from_inner(self.to_ref().not_between(low, high))
     }

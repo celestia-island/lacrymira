@@ -9,7 +9,9 @@ use crate::value::Value;
 pub enum Reply {
     /// Rows returned (each row is a list of column values).
     Rows {
+        /// The column names in declaration order.
         columns: Vec<String>,
+        /// The row data, each inner vec matching the columns.
         rows: Vec<Vec<Value>>,
     },
     /// Number of affected rows.

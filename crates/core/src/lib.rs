@@ -1,3 +1,21 @@
+//! # lacrymira-core
+//!
+//! The core types of the lacrymira data access layer: `Entity`, `Condition`,
+//! `Command` / `Reply`, `Value`, `Error`, `Select`, `TypedCondition`,
+//! `LockMode`, `InsertPolicy`, and `IndexBuilder`.
+//!
+//! This crate is **WASI-compatible**: zero tokio, compiles to
+//! `wasm32-wasip2`. Drivers live in `lacrymira-pg` (host-side) and
+//! `lacrymira-redb` (WASI-compatible).
+//!
+//! ## Design invariants
+//!
+//! - The `Command` / `Reply` msgpack wire format is frozen by contract tests.
+//! - `Select<E>` is a single concrete type (not typestate) — dynamic
+//!   composition (`let mut q = ...; if c { q = q.filter(..); }`) compiles.
+//! - `TypedCondition<E>` constrains filters to E's own Column enum;
+//!   cross-Entity conditions are a compile error.
+
 pub mod command;
 pub mod condition;
 pub mod entity;

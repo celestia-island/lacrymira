@@ -22,6 +22,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Fields};
 
+/// Derive the `Entity` trait and generate companion types in a named child module.
+///
+/// See the crate-level docs for the full hygiene contract.
 #[proc_macro_derive(Entity, attributes(lacrymira))]
 pub fn derive_entity(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -30,7 +33,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     let mut table_name = String::new();
     let mut schema = "public".to_string();
     let mut export_all = false;
-    let mut export_items: Vec<String> = Vec::new();
+    let export_items: Vec<String> = Vec::new();
 
     for attr in &input.attrs {
         if !attr.path().is_ident("lacrymira") {
@@ -163,7 +166,10 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
         .iter()
         .zip(field_types.iter())
         .map(|(ident, ty)| {
-            quote! { pub #ident: lacrymira_core::Field<#ty> }
+            quote! {
+                #[doc = concat!("The `", stringify!(#ident), "` column (set / unset / null).")]
+                pub #ident: lacrymira_core::Field<#ty>
+            }
         });
 
     // From<Model> for ActiveModel
@@ -172,14 +178,14 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     });
 
     // JSON marker impls (only for JSON columns)
-    let json_markers = json_columns.iter().map(|col| {
+    let json_markers = json_columns.iter().map(|_col| {
         quote! {
             impl lacrymira_core::JsonColumn for Column {
                 fn _json_marker() {}
             }
         }
     });
-    let has_json_markers = !json_columns.is_empty();
+    let _has_json_markers = !json_columns.is_empty();
 
     // Version marker (only if #[lacrymira(version)] was specified)
     let version_marker = if version_field {
@@ -216,17 +222,23 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         // ── Named child module (hygiene boundary) ──
         mod #module_name {
+            /// Column selector — one variant per column of the entity.
             pub enum Column {
-                #(#column_pascals),*
+                #(
+                    #[doc = concat!("The `", #column_names_lit, "` column.")]
+                    #column_pascals
+                ),*
             }
 
             impl Column {
+                /// Return the SQL column name for this variant.
                 pub fn name(&self) -> &'static str {
                     match self {
                         #(Column::#column_pascals => #column_names_lit),*
                     }
                 }
 
+                /// All columns in declaration order.
                 pub const ALL: &'static [Column] = &[
                     #(Column::#column_pascals),*
                 ];
@@ -247,6 +259,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 }
             }
 
+            /// Active model — per-column `Field` container for partial writes.
             #[derive(Clone, Debug, Default)]
             pub struct ActiveModel {
                 #(#active_fields),*
@@ -261,6 +274,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 }
             }
 
+            /// Primary-key value wrapper (single- or multi-column).
             pub struct PrimaryKeyValue(pub #pk_type);
 
             impl lacrymira_core::PrimaryKey for PrimaryKeyValue {

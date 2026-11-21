@@ -28,8 +28,6 @@ mod order {
         pub user_id: i64,
         pub total: f64,
     }
-
-    pub use orders_entity::Column;
 }
 
 // ── Zero hand-written string column names ──
@@ -147,7 +145,7 @@ fn typed_and_or_not() {
         .gt(18)
         .and(user::Column::Age.lt(65))
         .or(user::Column::Name.eq("Admin"))
-        .not();
+        .negate();
     let q = Select::<user::Model>::new().filter(cond);
     assert!(matches!(
         q.to_command(),

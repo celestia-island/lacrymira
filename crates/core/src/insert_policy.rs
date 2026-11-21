@@ -8,7 +8,10 @@ pub enum UuidStrategy {
     /// UUIDv4: random, collision probability ≈ 2^−122 (negligible).
     V4,
     /// UUIDv5: deterministic (namespace + name), collisions ARE possible.
-    V5 { namespace: String },
+    V5 {
+        /// The namespace UUID for deterministic generation.
+        namespace: String,
+    },
     /// UUIDv7: timestamp-ordered, collision probability ≈ 2^−122 per millisecond.
     V7,
     /// User provides the ID; framework does not generate.

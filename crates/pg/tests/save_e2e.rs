@@ -14,10 +14,14 @@ use lacrymira_pg::PgExecutor;
 #[derive(Debug, Clone, PartialEq, DeriveEntity)]
 #[lacrymira(table = "save_e2e_test")]
 pub struct TestModel {
+    /// Primary key.
     #[lacrymira(primary_key)]
     pub id: i64,
+    /// Display name.
     pub name: String,
+    /// Payload value.
     pub value: i32,
+    /// Optimistic-lock version.
     pub version: i64,
 }
 
@@ -84,14 +88,6 @@ async fn save_with_correct_version_succeeds() {
     let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
     let executor = setup(&url).await;
     let id = insert_row(&executor, "test-save", 42).await;
-
-    // Read the model
-    let model = TestModel {
-        id,
-        name: "test-save".into(),
-        value: 42,
-        version: 1, // ← current version
-    };
 
     // Modify and save (version 1 → 2)
     let updated = TestModel {

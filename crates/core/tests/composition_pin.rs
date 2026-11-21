@@ -8,16 +8,24 @@
 use lacrymira_core::*;
 
 // A minimal entity for the test (M2 will generate this from a derive).
+/// Minimal ledger model mirroring the chest `billing_reconcile` shape.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LedgerModel {
+    /// Primary key.
     pub id: i64,
+    /// Owning user id.
     pub user_id: String,
+    /// Entry type (`reserve` / `refund`).
     pub entry_type: String,
+    /// ISO week-start date the entry belongs to.
     pub week_start: String,
+    /// Degrees value recorded for the entry.
     pub degrees: i32,
 }
 
+/// Marker entity type implementing [`Entity`] for the pin.
 pub struct LedgerEntity;
+/// Primary-key marker for [`LedgerEntity`].
 pub struct LedgerPk;
 
 impl PrimaryKey for LedgerPk {

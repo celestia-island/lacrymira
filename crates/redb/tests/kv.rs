@@ -137,7 +137,7 @@ fn all_value_types_round_trip() {
         Value::Bool(true),
         Value::I32(-42),
         Value::I64(i64::MAX),
-        Value::F64(3.14159),
+        Value::F64(3.15),
         Value::Text("unicode: 你好 🌍".into()),
         Value::Bytes(vec![0, 255, 128]),
         Value::Uuid("01234567-89ab-cdef-0123-456789abcdef".into()),

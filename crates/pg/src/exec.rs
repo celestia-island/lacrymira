@@ -550,8 +550,6 @@ impl PgExecutor {
     where
         E: lacrymira_core::Entity,
     {
-        use lacrymira_core::Entity;
-
         let table = E::TABLE;
         let pk_indices = E::PK_INDICES;
         let columns = E::COLUMNS;
@@ -578,7 +576,7 @@ impl PgExecutor {
         // Build UPDATE SET for all columns except PK and version
         let mut set_parts = Vec::new();
         let mut params: Vec<lacrymira_core::Value> = Vec::new();
-        let mut model_values = E::to_values(&model);
+        let model_values = E::to_values(&model);
 
         for (i, col) in columns.iter().enumerate() {
             if pk_indices.contains(&i) || i == version_idx {
@@ -648,7 +646,6 @@ impl PgExecutor {
         pk_indices: &[usize],
         model_values: &[lacrymira_core::Value],
     ) -> Result<i64, lacrymira_core::Error> {
-        let version_idx = columns.iter().position(|c| *c == "version").unwrap();
         let mut where_parts = Vec::new();
         let mut params = Vec::new();
         for &pk_idx in pk_indices {

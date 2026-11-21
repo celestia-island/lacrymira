@@ -18,7 +18,6 @@ uuid = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true, features = ["std"] }
-rmp-serde = { workspace = true }
 tokio = { version = "^1", features = ["rt", "macros"], optional = true }
 thiserror = { workspace = true }
 
@@ -31,6 +30,7 @@ pgvector = ["postgres", "dep:pgvector"]
 workspace = true
 
 [dev-dependencies]
-lacrymira-macros = { path = "../macros" }
+rmp-serde = { workspace = true }
+lacrymira-macros = { workspace = true }
 tokio = { version = "^1", features = ["rt", "macros", "rt-multi-thread"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }

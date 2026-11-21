@@ -11,18 +11,15 @@ repository.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = "^1"
-rmp-serde = { workspace = true }
-jiff = { workspace = true }
 chrono = { workspace = true, optional = true }
 thiserror = { workspace = true }
-lacrymira-macros = { workspace = true }
 uuid = { version = "^1", features = ["v4", "v5", "serde"] }
 
 [dev-dependencies]
+rmp-serde = { workspace = true }
+lacrymira-macros = { workspace = true }
 
 [features]
-default = ["jiff"]
-jiff = []
 chrono = ["dep:chrono"]
 
 [lints]

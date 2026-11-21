@@ -120,7 +120,6 @@ impl RedbStore {
         let end_key = end.map(|v| Self::ns_key(ns, v));
 
         let mut entries = Vec::new();
-        let mut count = 0u64;
         let max = limit.unwrap_or(u64::MAX);
 
         // Use redb's range scan
@@ -131,9 +130,9 @@ impl RedbStore {
             (None, None) => table.range::<&[u8]>(..),
         };
 
-        for pair in range.map_err(map_redb)? {
+        for (count, pair) in range.map_err(map_redb)?.enumerate() {
             let (k, v) = pair.map_err(map_redb)?;
-            if count >= max {
+            if count as u64 >= max {
                 break;
             }
             // Strip namespace prefix from key
@@ -142,7 +141,6 @@ impl RedbStore {
             let value: Value =
                 rmp_serde::from_slice(v.value()).map_err(|e| Error::Decode(e.to_string()))?;
             entries.push((raw_key, value));
-            count += 1;
         }
 
         Ok(Reply::Entries(entries))
