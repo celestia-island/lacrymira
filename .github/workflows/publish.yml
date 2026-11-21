@@ -1,0 +1,30 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  crates-io:
+    runs-on: [self-hosted, linux, x64, local]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -e
+          for crate in lacrymira-macros lacrymira lacrymira-redb lacrymira-wasi lacrymira-pg; do
+            echo "=== publishing $crate ==="
+            if cargo publish -p "$crate"; then
+              echo "$crate published"
+              sleep 20
+            else
+              echo "::warning::$crate publish failed — if it is 'already exists', the crate is at the target version; otherwise inspect the error above"
+            fi
+          done

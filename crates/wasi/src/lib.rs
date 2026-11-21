@@ -40,8 +40,9 @@ use lacrymira::{Command, Error, Reply};
 #[allow(missing_docs, unsafe_code)]
 pub mod bindings {
     wit_bindgen::generate!({
-        // Resolved from CARGO_MANIFEST_DIR (crates/wasi) → the repo-root wit dir.
-        path: "../../wit",
+        // Resolved from CARGO_MANIFEST_DIR — the wit file ships inside the crate
+        // so `cargo publish` can package it.
+        path: "wit",
         world: "data-client",
     });
 }
