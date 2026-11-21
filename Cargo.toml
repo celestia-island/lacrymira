@@ -14,6 +14,7 @@ edition = "2021"
 rust-version = "1.94"
 authors = ["Celestia Island"]
 repository = "https://github.com/celestia-island/lacrymira"
+license-file = "LICENSE"
 
 [workspace.dependencies]
 # internal
