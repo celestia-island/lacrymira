@@ -199,3 +199,56 @@ fn jsonb_condition_msgpack_round_trip() {
     assert_eq!(bytes, re, "round-trip must be byte-identical");
     assert_eq!(back, cmd);
 }
+
+#[test]
+fn empty_in_renders_false_without_binding() {
+    let cmd = Command::Select {
+        table: "roles".into(),
+        filter: Some(ColumnRef::new("id").in_(Vec::<i64>::new())),
+        order_by: vec![],
+        limit: None,
+        offset: None,
+        lock: None,
+    };
+    let r = render(&cmd).unwrap();
+    assert!(
+        r.sql.contains(r#"WHERE FALSE"#),
+        "empty IN must render FALSE: {}",
+        r.sql
+    );
+    assert_eq!(r.params.len(), 0, "no array bind for empty IN");
+}
+
+#[test]
+fn empty_not_in_renders_true_without_binding() {
+    let cmd = Command::Select {
+        table: "roles".into(),
+        filter: Some(ColumnRef::new("id").not_in(Vec::<i64>::new())),
+        order_by: vec![],
+        limit: None,
+        offset: None,
+        lock: None,
+    };
+    let r = render(&cmd).unwrap();
+    assert!(
+        r.sql.contains(r#"WHERE TRUE"#),
+        "empty NOT IN must render TRUE: {}",
+        r.sql
+    );
+    assert_eq!(r.params.len(), 0, "no array bind for empty NOT IN");
+}
+
+#[test]
+fn nonempty_in_still_binds_any() {
+    let cmd = Command::Select {
+        table: "roles".into(),
+        filter: Some(ColumnRef::new("id").in_(vec![1i64, 2])),
+        order_by: vec![],
+        limit: None,
+        offset: None,
+        lock: None,
+    };
+    let r = render(&cmd).unwrap();
+    assert!(r.sql.contains("ANY($1)"), "{}", r.sql);
+    assert_eq!(r.params.len(), 1);
+}

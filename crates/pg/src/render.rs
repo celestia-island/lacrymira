@@ -228,6 +228,13 @@ impl RenderCtx {
             Condition::IsNull(col) => Ok(format!("{} IS NULL", quote_ident(&col.name))),
             Condition::IsNotNull(col) => Ok(format!("{} IS NOT NULL", quote_ident(&col.name))),
             Condition::In(col, values) => {
+                // Empty IN is FALSE for every row — never bind an empty
+                // array (PG types an empty bind as TEXT[], which mismatches
+                // non-text columns and silently matches nothing; erp's RBAC
+                // residual collapse traced to exactly this).
+                if values.is_empty() {
+                    return Ok("FALSE".to_string());
+                }
                 // = ANY($n) — statement-cache friendly (constant arity)
                 self.bind(Value::Array(values.clone()));
                 Ok(format!(
@@ -237,6 +244,10 @@ impl RenderCtx {
                 ))
             }
             Condition::NotIn(col, values) => {
+                // Empty NOT-IN excludes nothing — vacuously TRUE.
+                if values.is_empty() {
+                    return Ok("TRUE".to_string());
+                }
                 self.bind(Value::Array(values.clone()));
                 Ok(format!(
                     "{} != ANY(${})",
