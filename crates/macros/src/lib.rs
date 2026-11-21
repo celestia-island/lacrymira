@@ -222,6 +222,11 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         // ── Named child module (hygiene boundary) ──
         mod #module_name {
+            // Field types interpolated below (e.g. `Uuid`) resolve against the
+            // derive site's imports; without this re-import the child module
+            // cannot see them (rust#83583 resolution fallback is denied).
+            use super::*;
+
             /// Column selector — one variant per column of the entity.
             pub enum Column {
                 #(
