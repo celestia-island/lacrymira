@@ -228,3 +228,43 @@ mod jiff_ts {
         assert!(<jiff::Timestamp as TryFrom<Value>>::try_from(v).is_err());
     }
 }
+
+#[cfg(feature = "chrono")]
+mod chrono_ts {
+    use lacrymira::Value;
+
+    #[test]
+    fn chrono_datetime_round_trip() {
+        let dt = chrono::Utc::now();
+        let v = Value::from(&dt);
+        assert!(matches!(v, Value::Timestamp(_)));
+        let back: chrono::DateTime<chrono::Utc> = v.try_into().unwrap();
+        assert_eq!(back, dt);
+    }
+
+    #[test]
+    fn chrono_from_text_rfc3339() {
+        let raw = "2026-11-22T12:34:56.789+00:00";
+        let v = Value::Text(raw.into());
+        let back: chrono::DateTime<chrono::Utc> = v.try_into().unwrap();
+        assert_eq!(
+            back.to_rfc3339(),
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+                .to_rfc3339()
+        );
+    }
+
+    #[test]
+    fn chrono_option_null_is_none() {
+        let back: Option<chrono::DateTime<chrono::Utc>> = Value::Null.try_into().unwrap();
+        assert!(back.is_none());
+    }
+
+    #[test]
+    fn chrono_wrong_variant_fails() {
+        let v = Value::I64(1);
+        assert!(<chrono::DateTime<chrono::Utc> as TryFrom<Value>>::try_from(v).is_err());
+    }
+}
