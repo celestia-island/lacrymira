@@ -108,3 +108,41 @@ fn derive_generates_selectable_entity() {
 fn composite_pk_entity_metadata() {
     org_member::check_composite_pk();
 }
+
+mod artifact {
+    // Mirrors the arcaea pilot entity shape: non-primitive field types that
+    // only resolve via the derive site's imports (regression for rust#83583).
+    use lacrymira::DeriveEntity;
+    use uuid::Uuid;
+
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "artifacts")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: Uuid,
+        pub cid: String,
+        pub blob: Vec<u8>,
+        pub signature: Option<String>,
+    }
+
+    pub fn round_trip() {
+        let m = Model {
+            id: Uuid::new_v4(),
+            cid: "cid-1".into(),
+            blob: vec![1, 2, 3],
+            signature: Some("sig".into()),
+        };
+        let values = <Model as lacrymira::Entity>::to_values(&m);
+        assert_eq!(values.len(), 4);
+        assert!(matches!(values[0], lacrymira::Value::Uuid(_)));
+        assert!(matches!(values[2], lacrymira::Value::Bytes(_)));
+        assert!(matches!(values[3], lacrymira::Value::Text(_)));
+        let back = <Model as lacrymira::Entity>::from_values(&values).unwrap();
+        assert_eq!(back, m);
+    }
+}
+
+#[test]
+fn non_primitive_field_types_round_trip() {
+    artifact::round_trip();
+}
