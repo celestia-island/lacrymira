@@ -1,10 +1,10 @@
 //! The PostgreSQL executor — connects the sqlx [`PgPool`] to the `Command`/`Reply` contract.
 //!
 //! This is the host-side M3 continuation of the renderer: [`PgExecutor::execute`]
-//! renders a [`Command`](lacrymira_core::Command), binds its
-//! [`Value`](lacrymira_core::Value) parameters with concrete PostgreSQL type OIDs,
+//! renders a [`Command`](lacrymira::Command), binds its
+//! [`Value`](lacrymira::Value) parameters with concrete PostgreSQL type OIDs,
 //! executes through a sqlx pool, and decodes rows back into
-//! [`Reply::Rows`](lacrymira_core::Reply::Rows) / [`Reply::Affected`](lacrymira_core::Reply::Affected).
+//! [`Reply::Rows`](lacrymira::Reply::Rows) / [`Reply::Affected`](lacrymira::Reply::Affected).
 //! Host-side only; it never compiles to WASI, and `chrono` is deliberately absent —
 //! timestamps flow through `jiff` (with `jiff-sqlx` providing the wire encoding).
 //!
@@ -53,11 +53,11 @@
 //! `TIMESTAMPTZ`→`Timestamp` (RFC 3339, UTC), `TIMESTAMP`→`Timestamp`
 //! (interpreted as UTC), `DATE`→`Timestamp` (UTC midnight), `JSON`/`JSONB`,
 //! and 1-D arrays of those scalars. Anything else — `NUMERIC`, `TIME`,
-//! ranges, custom types — decodes to [`Error::Decode`](lacrymira_core::Error::Decode)
+//! ranges, custom types — decodes to [`Error::Decode`](lacrymira::Error::Decode)
 //! instead of silently mangling the value.
 
 use futures_util::TryStreamExt;
-use lacrymira_core::{Command, Error, Reply, Value};
+use lacrymira::{Command, Error, Reply, Value};
 use sqlx::postgres::{PgArguments, PgPool, PgPoolOptions, PgRow};
 use sqlx::{Column, Either, Postgres, Row};
 
@@ -499,7 +499,7 @@ fn parse_json(s: &str) -> Result<serde_json::Value, Error> {
 }
 
 /// Map a sqlx error to [`Error::Db`], preserving the SQLSTATE and deriving a
-/// stable `kind` classification for retry logic (see `lacrymira-core::Error`).
+/// stable `kind` classification for retry logic (see `lacrymira::Error`).
 fn map_db_error(e: sqlx::Error) -> Error {
     let sqlstate = match &e {
         sqlx::Error::Database(db) => db.code().map(|c| c.to_string()),
@@ -546,16 +546,16 @@ impl PgExecutor {
     /// The model's entity must have a `#[lacrymira(version)]` column.
     /// Generates `UPDATE ... SET version = version + 1 WHERE pk = $pk AND version = $expected`.
     /// Returns `Error::VersionConflict` if another writer updated the row first.
-    pub async fn save<E>(&self, model: E::Model) -> Result<E::Model, lacrymira_core::Error>
+    pub async fn save<E>(&self, model: E::Model) -> Result<E::Model, lacrymira::Error>
     where
-        E: lacrymira_core::Entity,
+        E: lacrymira::Entity,
     {
         let table = E::TABLE;
         let pk_indices = E::PK_INDICES;
         let columns = E::COLUMNS;
 
         if pk_indices.is_empty() {
-            return Err(lacrymira_core::Error::Config(
+            return Err(lacrymira::Error::Config(
                 "save() requires a primary key".into(),
             ));
         }
@@ -567,7 +567,7 @@ impl PgExecutor {
             .iter()
             .position(|c| *c == "version")
             .ok_or_else(|| {
-                lacrymira_core::Error::Config(format!(
+                lacrymira::Error::Config(format!(
                     "save() requires a #[lacrymira(version)] column on entity {}",
                     table
                 ))
@@ -575,7 +575,7 @@ impl PgExecutor {
 
         // Build UPDATE SET for all columns except PK and version
         let mut set_parts = Vec::new();
-        let mut params: Vec<lacrymira_core::Value> = Vec::new();
+        let mut params: Vec<lacrymira::Value> = Vec::new();
         let model_values = E::to_values(&model);
 
         for (i, col) in columns.iter().enumerate() {
@@ -597,15 +597,15 @@ impl PgExecutor {
         }
         // Add the expected version
         let expected_version = match &model_values[version_idx] {
-            lacrymira_core::Value::I64(v) => *v,
-            lacrymira_core::Value::I32(v) => *v as i64,
+            lacrymira::Value::I64(v) => *v,
+            lacrymira::Value::I32(v) => *v as i64,
             _ => {
-                return Err(lacrymira_core::Error::Config(
+                return Err(lacrymira::Error::Config(
                     "version column must be i64 or i32".into(),
                 ))
             }
         };
-        params.push(lacrymira_core::Value::I64(expected_version));
+        params.push(lacrymira::Value::I64(expected_version));
         where_parts.push(format!("\"version\" = ${}", params.len()));
 
         let sql = format!(
@@ -618,7 +618,7 @@ impl PgExecutor {
         let reply = self.execute_raw(&sql, params).await?;
 
         match reply {
-            lacrymira_core::Reply::Rows { rows, .. } if !rows.is_empty() => {
+            lacrymira::Reply::Rows { rows, .. } if !rows.is_empty() => {
                 // Decode the updated model from the returned row
                 // For now, return the original with bumped version
                 // (full row decoding is M3 executor's job)
@@ -631,7 +631,7 @@ impl PgExecutor {
                     .fetch_version(table, columns, pk_indices, &model_values)
                     .await
                     .unwrap_or(expected_version);
-                Err(lacrymira_core::Error::VersionConflict {
+                Err(lacrymira::Error::VersionConflict {
                     expected: expected_version,
                     actual,
                 })
@@ -644,8 +644,8 @@ impl PgExecutor {
         table: &str,
         columns: &[&str],
         pk_indices: &[usize],
-        model_values: &[lacrymira_core::Value],
-    ) -> Result<i64, lacrymira_core::Error> {
+        model_values: &[lacrymira::Value],
+    ) -> Result<i64, lacrymira::Error> {
         let mut where_parts = Vec::new();
         let mut params = Vec::new();
         for &pk_idx in pk_indices {
@@ -659,9 +659,9 @@ impl PgExecutor {
         );
         let reply = self.execute_raw(&sql, params).await?;
         match reply {
-            lacrymira_core::Reply::Rows { rows, .. } if !rows.is_empty() => match &rows[0][0] {
-                lacrymira_core::Value::I64(v) => Ok(*v),
-                lacrymira_core::Value::I32(v) => Ok(*v as i64),
+            lacrymira::Reply::Rows { rows, .. } if !rows.is_empty() => match &rows[0][0] {
+                lacrymira::Value::I64(v) => Ok(*v),
+                lacrymira::Value::I32(v) => Ok(*v as i64),
                 _ => Ok(0),
             },
             _ => Ok(0),
@@ -671,10 +671,10 @@ impl PgExecutor {
     async fn execute_raw(
         &self,
         sql: &str,
-        params: Vec<lacrymira_core::Value>,
-    ) -> Result<lacrymira_core::Reply, lacrymira_core::Error> {
-        self.execute(&lacrymira_core::Command::Sql {
-            dialect: lacrymira_core::Dialect::Postgres,
+        params: Vec<lacrymira::Value>,
+    ) -> Result<lacrymira::Reply, lacrymira::Error> {
+        self.execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
             text: sql.to_string(),
             params,
         })
@@ -695,19 +695,19 @@ impl PgExecutor {
         &self,
         table: &str,
         columns: &[&str],
-        mut values: Vec<lacrymira_core::Value>,
+        mut values: Vec<lacrymira::Value>,
         pk_index: usize,
-        policy: &lacrymira_core::InsertPolicy,
-    ) -> Result<lacrymira_core::Reply, lacrymira_core::Error> {
+        policy: &lacrymira::InsertPolicy,
+    ) -> Result<lacrymira::Reply, lacrymira::Error> {
         let max_retries = match &policy.collision {
-            lacrymira_core::CollisionPolicy::Retry(n) => *n,
-            lacrymira_core::CollisionPolicy::Fail => 0,
+            lacrymira::CollisionPolicy::Retry(n) => *n,
+            lacrymira::CollisionPolicy::Fail => 0,
         };
 
         let mut attempts = 0u32;
         loop {
             // Generate UUID if not user-provided
-            if !matches!(policy.uuid, lacrymira_core::UuidStrategy::UserProvided) {
+            if !matches!(policy.uuid, lacrymira::UuidStrategy::UserProvided) {
                 let name_hint = if attempts > 0 {
                     // For v5 retry: salt the name with attempt counter
                     Some(format!("attempt-{}", attempts))
@@ -715,11 +715,11 @@ impl PgExecutor {
                     None
                 };
                 let uuid = policy.generate_uuid(name_hint.as_deref())?;
-                values[pk_index] = lacrymira_core::Value::Uuid(uuid.to_string());
+                values[pk_index] = lacrymira::Value::Uuid(uuid.to_string());
             }
 
             // Attempt insert
-            let cmd = lacrymira_core::Command::Insert {
+            let cmd = lacrymira::Command::Insert {
                 table: table.to_string(),
                 columns: columns.iter().map(|c| c.to_string()).collect(),
                 rows: vec![values.clone()],
@@ -731,11 +731,11 @@ impl PgExecutor {
                 Err(e) if e.is_unique_violation() => {
                     attempts += 1;
                     let id_str = match &values[pk_index] {
-                        lacrymira_core::Value::Uuid(s) => s.clone(),
+                        lacrymira::Value::Uuid(s) => s.clone(),
                         _ => String::new(),
                     };
                     if attempts > max_retries {
-                        return Err(lacrymira_core::Error::IdCollision {
+                        return Err(lacrymira::Error::IdCollision {
                             attempts,
                             id: id_str,
                         });

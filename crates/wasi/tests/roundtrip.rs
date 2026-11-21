@@ -11,7 +11,7 @@
 
 use std::cell::RefCell;
 
-use lacrymira_core::{
+use lacrymira::{
     ColumnRef, Command, Condition, ConflictAction, Dialect, Error, KvOp, OnConflict, Reply, Value,
 };
 use lacrymira_wasi::{HostTransport, WasiExecutor};

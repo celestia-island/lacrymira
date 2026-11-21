@@ -16,7 +16,7 @@
 //! This means it can be dropped into a database that sea-orm has been
 //! migrating, and it will pick up exactly where sea-orm left off.
 
-use lacrymira_core::Error;
+use lacrymira::Error;
 
 /// A single migration.
 #[derive(Debug, Clone)]

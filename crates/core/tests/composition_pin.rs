@@ -5,7 +5,7 @@
 //! file fails to compile, the design is wrong — see the diesel lesson in the
 //! plan (§3.2 of _reports/orm-strategy-20261121/PLAN.md).
 
-use lacrymira_core::*;
+use lacrymira::*;
 
 // A minimal entity for the test (M2 will generate this from a derive).
 /// Minimal ledger model mirroring the chest `billing_reconcile` shape.

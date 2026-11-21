@@ -9,7 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-lacrymira-core = { workspace = true }
+lacrymira = { workspace = true }
 redb = { workspace = true, optional = true }
 serde = { workspace = true }
 rmp-serde = { workspace = true }

@@ -1,6 +1,6 @@
 //! Index drift check: compare declared IndexSpec against pg_indexes.
 
-use lacrymira_core::IndexSpec;
+use lacrymira::IndexSpec;
 
 /// An index as it exists in the database (parsed from pg_indexes).
 #[derive(Debug, Clone, PartialEq)]

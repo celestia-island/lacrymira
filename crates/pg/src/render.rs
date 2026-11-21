@@ -1,6 +1,6 @@
 //! PostgreSQL dialect rendering: `Command` → SQL text + parameters.
 
-use lacrymira_core::{Command, Condition, ConflictAction, Value};
+use lacrymira::{Command, Condition, ConflictAction, Value};
 
 /// A rendered SQL statement with positional parameters.
 #[derive(Debug, Clone, PartialEq)]
@@ -12,7 +12,7 @@ pub struct Rendered {
 }
 
 /// Render a `Command` to PostgreSQL SQL.
-pub fn render(cmd: &Command) -> Result<Rendered, lacrymira_core::Error> {
+pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
     let mut ctx = RenderCtx::new();
     match cmd {
         Command::Sql { text, params, .. } => Ok(Rendered {
@@ -168,7 +168,7 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira_core::Error> {
                 params: ctx.params,
             })
         }
-        Command::Kv { .. } => Err(lacrymira_core::Error::Config(
+        Command::Kv { .. } => Err(lacrymira::Error::Config(
             "KV commands are not supported by the PostgreSQL driver".into(),
         )),
     }
@@ -202,7 +202,7 @@ impl RenderCtx {
         self.params.push(v);
     }
 
-    fn render_condition(&mut self, cond: &Condition) -> Result<String, lacrymira_core::Error> {
+    fn render_condition(&mut self, cond: &Condition) -> Result<String, lacrymira::Error> {
         match cond {
             Condition::Eq(col, v) => Ok(self.render_cmp(col, "=", v)),
             Condition::Ne(col, v) => Ok(self.render_cmp(col, "!=", v)),
@@ -307,7 +307,7 @@ impl RenderCtx {
         }
     }
 
-    fn render_cmp(&mut self, col: &lacrymira_core::ColumnRef, op: &str, v: &Value) -> String {
+    fn render_cmp(&mut self, col: &lacrymira::ColumnRef, op: &str, v: &Value) -> String {
         match v {
             Value::Null => {
                 // = NULL → IS NULL, != NULL → IS NOT NULL

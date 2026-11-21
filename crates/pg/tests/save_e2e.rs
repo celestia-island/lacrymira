@@ -6,7 +6,7 @@
 //! LACRYMIRA_PG_TEST_URL=postgres://postgres:test@localhost/test cargo test -p lacrymira-pg --test save_e2e -- --ignored
 //! ```
 
-use lacrymira_core::Error;
+use lacrymira::Error;
 use lacrymira_macros::Entity as DeriveEntity;
 use lacrymira_pg::PgExecutor;
 
@@ -31,16 +31,16 @@ async fn setup(db_url: &str) -> PgExecutor {
     let executor = PgExecutor::connect(db_url).await.expect("connect");
     // Create test table
     executor
-        .execute(&lacrymira_core::Command::Sql {
-            dialect: lacrymira_core::Dialect::Postgres,
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
             text: "DROP TABLE IF EXISTS save_e2e_test".into(),
             params: vec![],
         })
         .await
         .expect("drop");
     executor
-        .execute(&lacrymira_core::Command::Sql {
-            dialect: lacrymira_core::Dialect::Postgres,
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
             text: "CREATE TABLE save_e2e_test (
                 id BIGSERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -57,13 +57,13 @@ async fn setup(db_url: &str) -> PgExecutor {
 
 async fn insert_row(executor: &PgExecutor, name: &str, value: i32) -> i64 {
     let reply = executor
-        .execute(&lacrymira_core::Command::Insert {
+        .execute(&lacrymira::Command::Insert {
             table: "save_e2e_test".into(),
             columns: vec!["name".into(), "value".into(), "version".into()],
             rows: vec![vec![
-                lacrymira_core::Value::Text(name.into()),
-                lacrymira_core::Value::I32(value),
-                lacrymira_core::Value::I64(1),
+                lacrymira::Value::Text(name.into()),
+                lacrymira::Value::I32(value),
+                lacrymira::Value::I64(1),
             ]],
             on_conflict: None,
         })
@@ -71,10 +71,10 @@ async fn insert_row(executor: &PgExecutor, name: &str, value: i32) -> i64 {
         .expect("insert");
 
     match reply {
-        lacrymira_core::Reply::Rows { columns, rows } => {
+        lacrymira::Reply::Rows { columns, rows } => {
             let id_idx = columns.iter().position(|c| c == "id").unwrap();
             match &rows[0][id_idx] {
-                lacrymira_core::Value::I64(id) => *id,
+                lacrymira::Value::I64(id) => *id,
                 _ => panic!("expected I64 id"),
             }
         }
@@ -112,8 +112,8 @@ async fn save_with_stale_version_conflicts() {
 
     // Simulate a stale read: we think version is 1, but someone bumped it to 5
     executor
-        .execute(&lacrymira_core::Command::Sql {
-            dialect: lacrymira_core::Dialect::Postgres,
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
             text: format!("UPDATE save_e2e_test SET version = 5 WHERE id = {}", id),
             params: vec![],
         })

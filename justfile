@@ -29,7 +29,7 @@ fmt-write:
 
 # Build the WASI target (core + redb + wasi — no host-side drivers).
 wasi:
-    cargo build --target wasm32-wasip2 --release -p lacrymira-core -p lacrymira-redb -p lacrymira-wasi
+    cargo build --target wasm32-wasip2 --release -p lacrymira -p lacrymira-redb -p lacrymira-wasi
 
 # Verify the wit world compiles.
 wit-check:
@@ -37,7 +37,7 @@ wit-check:
 
 # Verify zero tokio in the WASI tree.
 tokio-check:
-    @count=$(cargo tree -p lacrymira-core -p lacrymira-redb -p lacrymira-wasi --target wasm32-wasip2 --no-dev-dependencies 2>/dev/null | grep -c tokio || true); \
+    @count=$(cargo tree -p lacrymira -p lacrymira-redb -p lacrymira-wasi --target wasm32-wasip2 --no-dev-dependencies 2>/dev/null | grep -c tokio || true); \
     if [ "$$count" -gt 0 ]; then echo "FAIL: $$count tokio references in WASI tree"; exit 1; \
     else echo "PASS: zero tokio in WASI tree"; fi
 

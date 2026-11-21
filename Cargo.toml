@@ -18,8 +18,11 @@ repository = "https://github.com/celestia-island/lacrymira"
 
 [workspace.dependencies]
 # internal
-lacrymira-core = { path = "crates/core", version = "^0.1" }
+lacrymira = { path = "crates/core", version = "^0.1" }
 lacrymira-macros = { path = "crates/macros", version = "^0.1" }
+lacrymira-pg = { path = "crates/pg", version = "^0.1" }
+lacrymira-redb = { path = "crates/redb", version = "^0.1" }
+lacrymira-wasi = { path = "crates/wasi", version = "^0.1" }
 
 # serialization (msgpack everywhere — 2026-11-21 user ruling)
 serde = { version = "^1", features = ["derive"] }

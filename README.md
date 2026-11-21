@@ -71,11 +71,11 @@ Named after [Lacrymira](https://arcaea.fandom.com/wiki/Lacrymira_(Ascendant_-_8t
 ## Quick start
 
 ```rust
-use lacrymira_core::{Select, TypedColumnOps};
+use lacrymira::{DeriveEntity, Select, TypedColumnOps};
 use lacrymira_pg::PgExecutor;
 
 // Define an entity (hygienic: generates mod users_entity { Column, ActiveModel, ... })
-#[derive(Debug, Clone, PartialEq, lacrymira_macros::Entity)]
+#[derive(Debug, Clone, PartialEq, lacrymira::DeriveEntity)]
 #[lacrymira(table = "users")]
 pub struct Model {
     #[lacrymira(primary_key)]
@@ -88,14 +88,14 @@ pub struct Model {
 use users_entity::Column;
 
 #[tokio::main]
-async fn main() -> Result<(), lacrymira_core::Error> {
+async fn main() -> Result<(), lacrymira::Error> {
     let executor = PgExecutor::connect("postgres://localhost/mydb").await?;
 
     // Typed select — zero string column names
     let rows = Select::<Model>::new()
         .filter(Column::Name.eq("Alice"))
         .filter(Column::Metadata.json_get("$.theme").eq("dark"))
-        .lock(lacrymira_core::LockMode::SkipLocked)  // FOR UPDATE SKIP LOCKED
+        .lock(lacrymira::LockMode::SkipLocked)  // FOR UPDATE SKIP LOCKED
         .limit(10)
         .all(&executor)
         .await?;
@@ -115,7 +115,7 @@ async fn main() -> Result<(), lacrymira_core::Error> {
 
 | Crate | Role |
 |---|---|
-| `lacrymira-core` | Entity / Condition / Command / Reply / Error / TypedCondition / LockMode / InsertPolicy / IndexBuilder |
+| `lacrymira` | Entity / Condition / Command / Reply / Error / TypedCondition / LockMode / InsertPolicy / IndexBuilder |
 | `lacrymira-macros` | `#[derive(Entity)]` — hygienic child module, Column enum, ActiveModel, TypedColumnOps |
 | `lacrymira-pg` | PostgreSQL driver (sqlx 0.9, pgvector, jiff-sqlx) + migration runner + index drift check |
 | `lacrymira-redb` | redb KV driver (runs natively and in WASI, zero tokio) |
