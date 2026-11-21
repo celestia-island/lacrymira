@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://avatars.githubusercontent.com/celestia-island?s=128" alt="Celestia Island" width="96" />
+  <img src="https://raw.githubusercontent.com/celestia-island/celestia-island.github.io/main/res/logos/lacrymira.webp" alt="lacrymira" width="180" />
 </div>
 
 <h1 align="center">Lacrymira</h1>
