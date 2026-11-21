@@ -298,6 +298,35 @@ impl TryFrom<Value> for i16 {
     }
 }
 
+impl TryFrom<Value> for Option<Vec<u8>> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Bytes(bytes) => Ok(Some(bytes)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<Vec<String>> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Array(items) => items
+                .into_iter()
+                .map(|item| match item {
+                    Value::Text(s) => Ok(s),
+                    _ => Err(()),
+                })
+                .collect::<Result<Vec<String>, ()>>()
+                .map(Some),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
 impl TryFrom<Value> for Option<f32> {
     type Error = ();
     fn try_from(v: Value) -> Result<Self, Self::Error> {

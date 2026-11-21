@@ -201,6 +201,49 @@ fn bytes_ref_round_trip() {
     assert_eq!(back, b);
 }
 
+#[test]
+fn option_bytes_round_trip() {
+    // A nullable bytea column: Some binds the blob, None binds SQL NULL (the
+    // two are NOT interchangeable for "does this row carry a credential").
+    let blob = vec![0u8, 9, 8, 255];
+    let some = lacrymira::Value::from(&Some(blob.clone()));
+    assert_eq!(some, lacrymira::Value::Bytes(blob.clone()));
+    let back: Option<Vec<u8>> = some.try_into().unwrap();
+    assert_eq!(back, Some(blob));
+
+    let none: Option<Vec<u8>> = None;
+    let v = lacrymira::Value::from(&none);
+    assert_eq!(v, lacrymira::Value::Null);
+    let back: Option<Vec<u8>> = v.try_into().unwrap();
+    assert_eq!(back, None);
+}
+
+#[test]
+fn option_string_array_round_trip() {
+    // A nullable TEXT[] column: None is SQL NULL, `Some(vec![])` is an empty
+    // array — the distinction a tag column depends on.
+    let tags = vec!["kg".to_string(), "w2".to_string()];
+    let some = lacrymira::Value::from(&Some(tags.clone()));
+    assert_eq!(
+        some,
+        lacrymira::Value::Array(tags.iter().cloned().map(lacrymira::Value::Text).collect())
+    );
+    let back: Option<Vec<String>> = some.try_into().unwrap();
+    assert_eq!(back, Some(tags));
+
+    let empty: Option<Vec<String>> = Some(Vec::new());
+    let v = lacrymira::Value::from(&empty);
+    assert_eq!(v, lacrymira::Value::Array(Vec::new()));
+    let back: Option<Vec<String>> = v.try_into().unwrap();
+    assert_eq!(back, Some(Vec::new()));
+
+    let none: Option<Vec<String>> = None;
+    let v = lacrymira::Value::from(&none);
+    assert_eq!(v, lacrymira::Value::Null);
+    let back: Option<Vec<String>> = v.try_into().unwrap();
+    assert_eq!(back, None);
+}
+
 #[cfg(feature = "jiff")]
 mod jiff_ts {
     use lacrymira::Value;
