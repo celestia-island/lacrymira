@@ -139,3 +139,55 @@ fn index_spec_msgpack_round_trip() {
     let back: IndexSpec = rmp_serde::from_slice(&bytes).unwrap();
     assert_eq!(back, spec);
 }
+
+// ── Uuid / Option conversions (0.1.1 gap found by the arcaea pilot) ──
+
+#[test]
+fn uuid_ref_round_trip() {
+    let u = uuid::Uuid::new_v4();
+    let v = lacrymira::Value::from(&u);
+    assert!(matches!(v, lacrymira::Value::Uuid(_)));
+    let back: uuid::Uuid = v.try_into().unwrap();
+    assert_eq!(back, u);
+}
+
+#[test]
+fn option_string_round_trip() {
+    let some = Some("x".to_string());
+    let v = lacrymira::Value::from(&some);
+    assert!(matches!(v, lacrymira::Value::Text(_)));
+    let back: Option<String> = v.try_into().unwrap();
+    assert_eq!(back, some);
+
+    let none: Option<String> = None;
+    let v = lacrymira::Value::from(&none);
+    assert!(matches!(v, lacrymira::Value::Null));
+    let back: Option<String> = v.try_into().unwrap();
+    assert_eq!(back, None);
+}
+
+#[test]
+fn option_numeric_and_bool_round_trip() {
+    let v = lacrymira::Value::from(&Some(42i64));
+    assert_eq!(v, lacrymira::Value::I64(42));
+    let back: Option<i64> = v.try_into().unwrap();
+    assert_eq!(back, Some(42));
+
+    let v = lacrymira::Value::from(&Some(true));
+    let back: Option<bool> = v.try_into().unwrap();
+    assert_eq!(back, Some(true));
+
+    let none_i: Option<i32> = None;
+    let back: Option<i32> = lacrymira::Value::from(&none_i).try_into().unwrap();
+    assert_eq!(back, None);
+}
+
+#[test]
+fn option_uuid_round_trip() {
+    let u = uuid::Uuid::new_v4();
+    let v = lacrymira::Value::from(&Some(u));
+    let back: Option<uuid::Uuid> = v.try_into().unwrap();
+    assert_eq!(back, Some(u));
+    let back_none: Option<uuid::Uuid> = lacrymira::Value::Null.try_into().unwrap();
+    assert_eq!(back_none, None);
+}

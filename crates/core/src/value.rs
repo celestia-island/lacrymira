@@ -106,3 +106,82 @@ impl TryFrom<Value> for serde_json::Value {
         }
     }
 }
+
+impl TryFrom<Value> for uuid::Uuid {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Uuid(s) => uuid::Uuid::parse_str(&s).map_err(|_| ()),
+            Value::Text(s) => uuid::Uuid::parse_str(&s).map_err(|_| ()),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<String> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Text(s) => Ok(Some(s)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<i64> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I64(x) => Ok(Some(x)),
+            Value::I32(x) => Ok(Some(x as i64)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<i32> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I32(x) => Ok(Some(x)),
+            Value::I64(x) => Ok(Some(x as i32)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<bool> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Bool(b) => Ok(Some(b)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<f64> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::F64(x) => Ok(Some(x)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<uuid::Uuid> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Uuid(s) => uuid::Uuid::parse_str(&s).map(Some).map_err(|_| ()),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
