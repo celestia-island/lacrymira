@@ -63,6 +63,19 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
                 params: ctx.params,
             })
         }
+        Command::Count { table, filter } => {
+            let mut ctx = RenderCtx::new();
+            let mut sql = format!("SELECT COUNT(*) FROM {}", quote_ident(table));
+            if let Some(cond) = filter {
+                let where_sql = ctx.render_condition(cond)?;
+                sql.push_str(" WHERE ");
+                sql.push_str(&where_sql);
+            }
+            Ok(Rendered {
+                sql,
+                params: ctx.params,
+            })
+        }
         Command::Insert {
             table,
             columns,

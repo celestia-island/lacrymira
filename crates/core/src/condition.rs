@@ -345,3 +345,53 @@ impl From<&Vec<u8>> for Value {
         Value::Bytes(v.clone())
     }
 }
+
+impl From<&Option<serde_json::Value>> for Value {
+    fn from(v: &Option<serde_json::Value>) -> Self {
+        match v {
+            Some(j) => Value::Json(j.to_string()),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Vec<String>> for Value {
+    fn from(v: &Vec<String>) -> Self {
+        Value::Array(v.iter().map(|s| Value::Text(s.clone())).collect())
+    }
+}
+impl From<&Vec<f32>> for Value {
+    fn from(v: &Vec<f32>) -> Self {
+        Value::Array(v.iter().map(|x| Value::F64(*x as f64)).collect())
+    }
+}
+impl From<&Vec<i64>> for Value {
+    fn from(v: &Vec<i64>) -> Self {
+        Value::Array(v.iter().map(|x| Value::I64(*x)).collect())
+    }
+}
+impl From<&f32> for Value {
+    fn from(v: &f32) -> Self {
+        Value::F64(*v as f64)
+    }
+}
+impl From<&i16> for Value {
+    fn from(v: &i16) -> Self {
+        Value::I32(*v as i32)
+    }
+}
+impl From<&Option<f32>> for Value {
+    fn from(v: &Option<f32>) -> Self {
+        match v {
+            Some(x) => Value::F64(*x as f64),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<i16>> for Value {
+    fn from(v: &Option<i16>) -> Self {
+        match v {
+            Some(x) => Value::I32(*x as i32),
+            None => Value::Null,
+        }
+    }
+}

@@ -262,3 +262,30 @@ fn msgpack_encoding_is_deterministic() {
     let b = rmp_serde::to_vec(&cmd).unwrap();
     assert_eq!(a, b, "same input must encode identically");
 }
+
+#[test]
+fn command_count_round_trips() {
+    assert_round_trip(
+        "Count",
+        &Command::Count {
+            table: "billing_ledger".into(),
+            filter: Some(Condition::Eq(
+                ColumnRef {
+                    name: "user_id".into(),
+                },
+                Value::Text("u1".into()),
+            )),
+        },
+    );
+}
+
+#[test]
+fn command_count_no_filter_round_trips() {
+    assert_round_trip(
+        "Count (no filter)",
+        &Command::Count {
+            table: "users".into(),
+            filter: None,
+        },
+    );
+}

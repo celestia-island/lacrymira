@@ -206,3 +206,118 @@ impl TryFrom<Value> for jiff::Timestamp {
         }
     }
 }
+
+// ── G1: Option<serde_json::Value> round-trip (nullable JSONB) ──
+
+impl TryFrom<Value> for Option<serde_json::Value> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Json(s) => serde_json::from_str(&s).map(Some).map_err(|_| ()),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+// ── G3: array round-trips (TEXT[] / FLOAT4[]) ──
+
+impl TryFrom<Value> for Vec<String> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Array(items) => items
+                .into_iter()
+                .map(|item| match item {
+                    Value::Text(s) => Ok(s),
+                    _ => Err(()),
+                })
+                .collect(),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Vec<f32> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Array(items) => items
+                .into_iter()
+                .map(|item| match item {
+                    Value::F64(x) => Ok(x as f32),
+                    Value::I64(x) => Ok(x as f32),
+                    Value::I32(x) => Ok(x as f32),
+                    _ => Err(()),
+                })
+                .collect(),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Vec<i64> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Array(items) => items
+                .into_iter()
+                .map(|item| match item {
+                    Value::I64(x) => Ok(x),
+                    Value::I32(x) => Ok(x as i64),
+                    _ => Err(()),
+                })
+                .collect(),
+            _ => Err(()),
+        }
+    }
+}
+
+// ── G5: f32 / i16 conversions (FLOAT4 decodes to F64, INT2 to I32) ──
+
+impl TryFrom<Value> for f32 {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::F64(x) => Ok(x as f32),
+            Value::I32(x) => Ok(x as f32),
+            Value::I64(x) => Ok(x as f32),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for i16 {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I32(x) => Ok(x as i16),
+            Value::I64(x) => Ok(x as i16),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<f32> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::F64(x) => Ok(Some(x as f32)),
+            Value::I32(x) => Ok(Some(x as f32)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<Value> for Option<i16> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::I32(x) => Ok(Some(x as i16)),
+            Value::I64(x) => Ok(Some(x as i16)),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
