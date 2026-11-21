@@ -4,7 +4,7 @@
 //! wasm component ship `Command`s to a host-side executor and receive `Reply`s.
 //! The payload on the wire is msgpack (2026-11-21 user ruling: msgpack across
 //! the family). The `Command`/`Reply` msgpack encoding itself is frozen by
-//! `lacrymira-core`'s contract tests; this crate only adds the wit transport
+//! `lacrymira`'s contract tests; this crate only adds the wit transport
 //! on top and never re-encodes anything.
 //!
 //! Two sides live here:
@@ -28,7 +28,7 @@
 //!
 //! [`WasiExecutor::with_transport`]: crate::WasiExecutor::with_transport
 
-use lacrymira_core::{Command, Error, Reply};
+use lacrymira::{Command, Error, Reply};
 
 /// Bindings generated from the `celestia:lacrymira/data-client` wit world.
 ///
@@ -48,29 +48,29 @@ pub mod bindings {
 
 // ── wire (de)serialization ──────────────────────────────────────────────────
 
-/// Serialize a [`Command`](lacrymira_core::Command) to msgpack wire bytes.
+/// Serialize a [`Command`](lacrymira::Command) to msgpack wire bytes.
 ///
 /// Encoding the frozen contract types cannot practically fail (their msgpack
 /// encoding is total); the error arm exists for exhaustiveness and maps to
-/// [`Error::Config`](lacrymira_core::Error::Config).
+/// [`Error::Config`](lacrymira::Error::Config).
 pub fn encode_command(cmd: &Command) -> Result<Vec<u8>, Error> {
     rmp_serde::to_vec(cmd)
         .map_err(|e| Error::Config(format!("msgpack encode of Command failed: {e}")))
 }
 
-/// Deserialize a [`Command`](lacrymira_core::Command) from msgpack wire bytes.
+/// Deserialize a [`Command`](lacrymira::Command) from msgpack wire bytes.
 pub fn decode_command(bytes: &[u8]) -> Result<Command, Error> {
     rmp_serde::from_slice(bytes)
         .map_err(|e| Error::Decode(format!("msgpack decode of Command failed: {e}")))
 }
 
-/// Serialize a [`Reply`](lacrymira_core::Reply) to msgpack wire bytes.
+/// Serialize a [`Reply`](lacrymira::Reply) to msgpack wire bytes.
 pub fn encode_reply(reply: &Reply) -> Result<Vec<u8>, Error> {
     rmp_serde::to_vec(reply)
         .map_err(|e| Error::Config(format!("msgpack encode of Reply failed: {e}")))
 }
 
-/// Deserialize a [`Reply`](lacrymira_core::Reply) from msgpack wire bytes.
+/// Deserialize a [`Reply`](lacrymira::Reply) from msgpack wire bytes.
 pub fn decode_reply(bytes: &[u8]) -> Result<Reply, Error> {
     rmp_serde::from_slice(bytes)
         .map_err(|e| Error::Decode(format!("msgpack decode of Reply failed: {e}")))
@@ -87,15 +87,15 @@ pub use bindings::celestia::lacrymira::exec::ErrorInfo;
 #[cfg(feature = "wit")]
 pub const ERR_KIND_PREFIX: &str = "err:";
 
-/// `error-info.kind` carrying [`Error::NotFound`](lacrymira_core::Error::NotFound).
+/// `error-info.kind` carrying [`Error::NotFound`](lacrymira::Error::NotFound).
 #[cfg(feature = "wit")]
 pub const KIND_NOT_FOUND: &str = "err:not_found";
 
-/// `error-info.kind` carrying [`Error::Decode`](lacrymira_core::Error::Decode).
+/// `error-info.kind` carrying [`Error::Decode`](lacrymira::Error::Decode).
 #[cfg(feature = "wit")]
 pub const KIND_DECODE: &str = "err:decode";
 
-/// `error-info.kind` carrying [`Error::Config`](lacrymira_core::Error::Config).
+/// `error-info.kind` carrying [`Error::Config`](lacrymira::Error::Config).
 #[cfg(feature = "wit")]
 pub const KIND_CONFIG: &str = "err:config";
 
@@ -243,7 +243,7 @@ impl<T: WireTransport> WasiExecutor<T> {
     ///
     /// Failures surface as the core [`Error`]: a wit `error-info` is mapped
     /// back (see the `err:`-prefix convention above), and a malformed reply
-    /// payload is an [`Error::Decode`](lacrymira_core::Error::Decode).
+    /// payload is an [`Error::Decode`](lacrymira::Error::Decode).
     pub fn execute(&self, cmd: &Command) -> Result<Reply, Error> {
         let wire = encode_command(cmd)?;
         match self.transport.raw_execute(&wire) {

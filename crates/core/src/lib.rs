@@ -1,4 +1,8 @@
-//! # lacrymira-core
+//! # lacrymira
+//!
+//! The primary crate of the lacrymira data access layer: all core types
+//! plus the [`DeriveEntity`] macro re-export. Drivers are separate crates
+//! (`lacrymira-pg` / `lacrymira-redb` / `lacrymira-wasi`).
 //!
 //! The core types of the lacrymira data access layer: `Entity`, `Condition`,
 //! `Command` / `Reply`, `Value`, `Error`, `Select`, `TypedCondition`,
@@ -41,3 +45,6 @@ pub use reply::Reply;
 pub use select::Select;
 pub use typed_condition::{JsonPathTyped, TypedColumnOps, TypedCondition, TypedJsonColumnOps};
 pub use value::Value;
+
+// ── Derive macro（用户不再需要单独依赖 lacrymira-macros）──
+pub use lacrymira_macros::Entity as DeriveEntity;

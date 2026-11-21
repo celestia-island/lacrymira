@@ -6,7 +6,7 @@
 //! bump of the wit world. The test exists to make that impossible to do
 //! by accident.
 
-use lacrymira_core::*;
+use lacrymira::*;
 
 fn round_trip<T: serde::Serialize + serde::de::DeserializeOwned>(v: &T) -> (T, bool) {
     let first = rmp_serde::to_vec(v).expect("first encode");

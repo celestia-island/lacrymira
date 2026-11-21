@@ -1,6 +1,6 @@
 //! Tests for IndexBuilder and InsertPolicy.
 
-use lacrymira_core::*;
+use lacrymira::*;
 
 // ── IndexBuilder ──
 

@@ -15,7 +15,7 @@ mod ledger {
     }
 
     pub fn check_metadata() {
-        use lacrymira_core::Entity;
+        use lacrymira::Entity;
         assert_eq!(<Model as Entity>::TABLE, "billing_ledger");
         assert_eq!(<Model as Entity>::SCHEMA, "public");
         assert_eq!(<Model as Entity>::COLUMN_COUNT, 4);
@@ -52,7 +52,7 @@ mod ledger {
     }
 
     pub fn check_select() {
-        use lacrymira_core::{ColumnRef, Command, Select};
+        use lacrymira::{ColumnRef, Command, Select};
         let q = Select::<Model>::new()
             .filter(ColumnRef::new("user_id").eq("test"))
             .limit(10);
@@ -77,7 +77,7 @@ mod org_member {
     }
 
     pub fn check_composite_pk() {
-        use lacrymira_core::Entity;
+        use lacrymira::Entity;
         assert_eq!(<Model as Entity>::TABLE, "org_members");
         assert_eq!(<Model as Entity>::SCHEMA, "billing");
         assert_eq!(<Model as Entity>::PK_INDICES, &[0, 1]);

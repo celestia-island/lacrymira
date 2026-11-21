@@ -27,9 +27,7 @@
 //! Tests isolate themselves with per-process table names (`DROP TABLE IF
 //! EXISTS` + `CREATE`), so a shared scratch database is safe to reuse.
 
-use lacrymira_core::{
-    ColumnRef, Command, Condition, ConflictAction, Dialect, OnConflict, Reply, Value,
-};
+use lacrymira::{ColumnRef, Command, Condition, ConflictAction, Dialect, OnConflict, Reply, Value};
 use lacrymira_pg::PgExecutor;
 
 /// Unique table name per test + process, so parallel and repeated runs collide.
@@ -601,11 +599,11 @@ async fn kv_command_rejected_without_db() {
     let err = x
         .execute(&Command::Kv {
             namespace: "anything".into(),
-            op: lacrymira_core::KvOp::Get {
+            op: lacrymira::KvOp::Get {
                 key: Value::Text("k".into()),
             },
         })
         .await
         .expect_err("KV must be rejected by the PG driver");
-    assert!(matches!(err, lacrymira_core::Error::Config(_)), "{err:?}");
+    assert!(matches!(err, lacrymira::Error::Config(_)), "{err:?}");
 }

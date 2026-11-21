@@ -1,6 +1,6 @@
 //! Tests for the new database features: JSONB, locks, version conflict.
 
-use lacrymira_core::*;
+use lacrymira::*;
 use lacrymira_pg::render;
 
 // ── JSONB rendering ──

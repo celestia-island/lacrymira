@@ -1,6 +1,6 @@
 //! Tests for index drift checking.
 
-use lacrymira_core::IndexBuilder;
+use lacrymira::IndexBuilder;
 use lacrymira_pg::{check_drift, parse_pg_index};
 
 // ── Drift detection: clean state ──

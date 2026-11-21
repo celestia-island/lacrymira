@@ -3,7 +3,7 @@
 //! Runs natively and inside WASI components (redb is a pure-Rust embedded
 //! KV store with no network dependency). Implements the `Command::Kv` arm.
 
-use lacrymira_core::{Command, Error, KvOp, Reply, Value};
+use lacrymira::{Command, Error, KvOp, Reply, Value};
 use redb::ReadableDatabase;
 
 /// A redb-backed KV store implementing the lacrymira command surface.

@@ -168,19 +168,19 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
         .map(|(ident, ty)| {
             quote! {
                 #[doc = concat!("The `", stringify!(#ident), "` column (set / unset / null).")]
-                pub #ident: lacrymira_core::Field<#ty>
+                pub #ident: lacrymira::Field<#ty>
             }
         });
 
     // From<Model> for ActiveModel
     let from_model_fields = field_idents.iter().map(|ident| {
-        quote! { #ident: lacrymira_core::Field::Value(model.#ident) }
+        quote! { #ident: lacrymira::Field::Value(model.#ident) }
     });
 
     // JSON marker impls (only for JSON columns)
     let json_markers = json_columns.iter().map(|_col| {
         quote! {
-            impl lacrymira_core::JsonColumn for Column {
+            impl lacrymira::JsonColumn for Column {
                 fn _json_marker() {}
             }
         }
@@ -190,7 +190,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     // Version marker (only if #[lacrymira(version)] was specified)
     let version_marker = if version_field {
         quote! {
-            impl lacrymira_core::VersionColumn for Column {
+            impl lacrymira::VersionColumn for Column {
                 fn _version_marker() {}
             }
         }
@@ -214,7 +214,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
     // (trait not in scope) — which is exactly what we want.
     let json_ops_impl = if !json_columns.is_empty() {
         quote! {
-            impl lacrymira_core::TypedJsonColumnOps for Column {}
+            impl lacrymira::TypedJsonColumnOps for Column {}
         }
     } else {
         quote! {}
@@ -244,7 +244,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 ];
             }
 
-            impl lacrymira_core::TypedColumnOps for Column {
+            impl lacrymira::TypedColumnOps for Column {
                 type Entity = super::#struct_name;
                 fn column_name(&self) -> &'static str {
                     self.name()
@@ -253,9 +253,9 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 
             #json_ops_impl
 
-            impl From<Column> for lacrymira_core::ColumnRef {
+            impl From<Column> for lacrymira::ColumnRef {
                 fn from(c: Column) -> Self {
-                    lacrymira_core::ColumnRef::new(c.name())
+                    lacrymira::ColumnRef::new(c.name())
                 }
             }
 
@@ -277,7 +277,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
             /// Primary-key value wrapper (single- or multi-column).
             pub struct PrimaryKeyValue(pub #pk_type);
 
-            impl lacrymira_core::PrimaryKey for PrimaryKeyValue {
+            impl lacrymira::PrimaryKey for PrimaryKeyValue {
                 type Value = #pk_type;
             }
 
@@ -286,7 +286,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
         }
 
         // ── Entity impl (in user's namespace, but trait impls don't pollute) ──
-        impl lacrymira_core::Entity for #struct_name {
+        impl lacrymira::Entity for #struct_name {
             const TABLE: &'static str = #table_name;
             const SCHEMA: &'static str = #schema;
             const COLUMN_COUNT: usize = #column_count;
@@ -296,14 +296,14 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
             type ActiveModel = #module_name::ActiveModel;
             type PrimaryKey = #module_name::PrimaryKeyValue;
 
-            fn to_values(model: &Self::Model) -> Vec<lacrymira_core::Value> {
-                use lacrymira_core::Value;
+            fn to_values(model: &Self::Model) -> Vec<lacrymira::Value> {
+                use lacrymira::Value;
                 vec![
                     #(Value::from(&model.#field_idents)),*
                 ]
             }
 
-            fn from_values(values: &[lacrymira_core::Value]) -> Option<Self::Model> {
+            fn from_values(values: &[lacrymira::Value]) -> Option<Self::Model> {
                 if values.len() != #column_count {
                     return None;
                 }

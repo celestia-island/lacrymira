@@ -9,7 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-lacrymira-core = { workspace = true }
+lacrymira = { workspace = true }
 serde = { workspace = true }
 rmp-serde = { workspace = true }
 wit-bindgen = { version = "^0.57", optional = true, features = ["macros"] }

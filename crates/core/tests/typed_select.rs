@@ -34,28 +34,28 @@ mod order {
 
 #[test]
 fn typed_column_eq() {
-    use lacrymira_core::TypedColumnOps;
+    use lacrymira::TypedColumnOps;
     let cond = user::Column::Name.eq("Alice");
     let inner = cond.into_inner();
     assert!(matches!(
         inner,
-        lacrymira_core::Condition::Eq(ref col, _) if col.name == "name"
+        lacrymira::Condition::Eq(ref col, _) if col.name == "name"
     ));
 }
 
 #[test]
 fn typed_composition() {
-    use lacrymira_core::TypedColumnOps;
+    use lacrymira::TypedColumnOps;
     let cond = user::Column::Age.gt(25).and(user::Column::Age.lt(65));
     let inner = cond.into_inner();
-    assert!(matches!(inner, lacrymira_core::Condition::All(_)));
+    assert!(matches!(inner, lacrymira::Condition::All(_)));
 }
 
 // ── Dynamic composition pin (diesel lesson) ──
 
 #[test]
 fn typed_dynamic_composition_pin() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
 
     let age_filter: Option<i32> = Some(30);
     let mut q = Select::<user::Model>::new().filter(user::Column::Name.like("%Alice%"));
@@ -63,14 +63,14 @@ fn typed_dynamic_composition_pin() {
         q = q.filter(user::Column::Age.gte(age));
     }
     let cmd = q.to_command();
-    assert!(matches!(cmd, lacrymira_core::Command::Select { .. }));
+    assert!(matches!(cmd, lacrymira::Command::Select { .. }));
 }
 
 // ── Full typed query ──
 
 #[test]
 fn typed_select_full_query() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
 
     let q = Select::<user::Model>::new()
         .filter(user::Column::Age.between(18, 65))
@@ -79,7 +79,7 @@ fn typed_select_full_query() {
         .limit(10);
 
     let cmd = q.to_command();
-    if let lacrymira_core::Command::Select { limit, .. } = cmd {
+    if let lacrymira::Command::Select { limit, .. } = cmd {
         assert_eq!(limit, Some(10));
     } else {
         panic!("expected Select");
@@ -90,7 +90,7 @@ fn typed_select_full_query() {
 
 #[test]
 fn all_operators_typed() {
-    use lacrymira_core::TypedColumnOps;
+    use lacrymira::TypedColumnOps;
 
     let _c1 = user::Column::Id.eq(1);
     let _c2 = user::Column::Id.ne(2);
@@ -116,39 +116,30 @@ fn all_operators_typed() {
 
 #[test]
 fn same_entity_column_works() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
     let q = Select::<user::Model>::new().filter(user::Column::Id.eq(42));
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
 
 // ── Escape hatch: raw Condition accepted ──
 
 #[test]
 fn raw_condition_escape_hatch() {
-    use lacrymira_core::{ColumnRef, Select};
+    use lacrymira::{ColumnRef, Select};
     let q = Select::<user::Model>::new().filter(ColumnRef::new("any_column").eq("any_value"));
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
 
 // ── TypedCondition composition ──
 
 #[test]
 fn typed_and_or_not() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
     let cond = user::Column::Age
         .gt(18)
         .and(user::Column::Age.lt(65))
         .or(user::Column::Name.eq("Admin"))
         .negate();
     let q = Select::<user::Model>::new().filter(cond);
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
