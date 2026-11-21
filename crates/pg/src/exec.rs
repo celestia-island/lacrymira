@@ -939,3 +939,97 @@ impl PgExecutor {
         }
     }
 }
+
+// ── G10: ActiveModel partial-write paths ──
+
+impl PgExecutor {
+    /// Insert only the set fields of an ActiveModel; DB defaults fire for
+    /// the rest. Returns the stored row re-decoded as a Model.
+    ///
+    /// `Field::Unset` columns are omitted from the INSERT column list,
+    /// `Field::Null` binds SQL NULL, `Field::Value(v)` binds v.
+    pub async fn insert_active<E>(&self, active: &E::ActiveModel) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let pairs = E::active_pairs(active);
+        if pairs.is_empty() {
+            return Err(Error::Config(
+                "insert_active: no fields set in ActiveModel".into(),
+            ));
+        }
+        let cmd = Command::Insert {
+            table: E::TABLE.to_string(),
+            columns: pairs.iter().map(|(c, _)| c.clone()).collect(),
+            rows: vec![pairs.into_iter().map(|(_, v)| v).collect()],
+            on_conflict: None,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or_else(|| Error::Decode("INSERT returned no row".into()))
+            .and_then(|r| row_to_model::<E>(r))
+    }
+
+    /// Update only the set fields of an ActiveModel by primary key.
+    ///
+    /// Requires a single-column PK. The PK column must be `Field::Value`
+    /// in the ActiveModel (you cannot UPDATE a row without addressing it);
+    /// it is excluded from the SET clause.
+    pub async fn update_active<E>(&self, active: &E::ActiveModel) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        if E::PK_INDICES.len() != 1 {
+            return Err(Error::Config(
+                "update_active supports single-column PKs".into(),
+            ));
+        }
+        let pk_col = E::COLUMNS[E::PK_INDICES[0]];
+
+        let pairs = E::active_pairs(active);
+        let pk_value = pairs
+            .iter()
+            .find(|(c, _)| c == pk_col)
+            .map(|(_, v)| v.clone())
+            .ok_or_else(|| {
+                Error::Config(format!(
+                    "update_active: primary key `{}` must be set (Field::Value)",
+                    pk_col
+                ))
+            })?;
+
+        let sets: Vec<_> = pairs.into_iter().filter(|(c, _)| c != pk_col).collect();
+        if sets.is_empty() {
+            return Err(Error::Config("update_active: no non-PK fields set".into()));
+        }
+
+        let mut set_parts: Vec<String> = Vec::new();
+        let mut params: Vec<lacrymira::Value> = Vec::new();
+        for (col, v) in &sets {
+            params.push(v.clone());
+            set_parts.push(format!("\"{}\" = ${}", col, params.len()));
+        }
+        params.push(pk_value);
+        let where_sql = format!("\"{}\" = ${}", pk_col, params.len());
+
+        let sql = format!(
+            "UPDATE \"{}\" SET {} WHERE {} RETURNING *",
+            E::TABLE,
+            set_parts.join(", "),
+            where_sql
+        );
+        let cmd = Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
+            text: sql,
+            params,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or(Error::NotFound)
+            .and_then(|r| row_to_model::<E>(r))
+    }
+}

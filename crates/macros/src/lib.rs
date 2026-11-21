@@ -315,6 +315,30 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 ]
             }
 
+            fn active_pairs(
+                active: &Self::ActiveModel,
+            ) -> Vec<(String, lacrymira::Value)> {
+                let mut pairs = Vec::new();
+                #(
+                    match &active.#field_idents {
+                        lacrymira::Field::Value(v) => {
+                            pairs.push((
+                                #column_names_lit.to_string(),
+                                lacrymira::Value::from(v),
+                            ));
+                        }
+                        lacrymira::Field::Null => {
+                            pairs.push((
+                                #column_names_lit.to_string(),
+                                lacrymira::Value::Null,
+                            ));
+                        }
+                        lacrymira::Field::Unset => {}
+                    }
+                )*
+                pairs
+            }
+
             fn from_values(values: &[lacrymira::Value]) -> Option<Self::Model> {
                 if values.len() != #column_count {
                     return None;

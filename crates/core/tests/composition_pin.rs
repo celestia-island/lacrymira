@@ -53,6 +53,12 @@ impl Entity for LedgerEntity {
         ]
     }
 
+    fn active_pairs(active: &Self::ActiveModel) -> Vec<(String, Value)> {
+        // Hand-written test entity: ActiveModel IS the Model (simplified pin).
+        let _ = active;
+        Vec::new()
+    }
+
     fn from_values(values: &[Value]) -> Option<Self::Model> {
         if values.len() != 5 {
             return None;
