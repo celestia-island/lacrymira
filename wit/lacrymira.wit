@@ -1,0 +1,20 @@
+package celestia:lacrymira@0.1.0;
+
+/// Unified command surface: the component constructs a `Command`, the host
+/// executes it against whichever backend it owns. The payload is msgpack
+/// (2026-11-21 user ruling: msgpack across the family).
+interface exec {
+    /// Execute a serialized `Command` (msgpack bytes) and return a
+    /// serialized `Reply` (msgpack bytes), or an error.
+    execute: func(cmd: list<u8>) -> result<list<u8>, error-info>;
+
+    record error-info {
+        kind: string,
+        message: string,
+        sqlstate: option<string>,
+    }
+}
+
+world data-client {
+    import exec;
+}

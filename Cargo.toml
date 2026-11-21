@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/macros",
+    "crates/pg",
+    "crates/redb",
+    "crates/wasi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+authors = ["Celestia Island"]
+license = "SySL-1.0"
+repository = "https://github.com/celestia-island/lacrymira"
+
+[workspace.dependencies]
+# internal
+lacrymira-core = { path = "crates/core", version = "^0.1" }
+lacrymira-macros = { path = "crates/macros", version = "^0.1" }
+
+# serialization (msgpack everywhere — 2026-11-21 user ruling)
+serde = { version = "^1", features = ["derive"] }
+rmp-serde = "^1"
+serde_json = "^1"
+
+# time (jiff first, chrono opt-in)
+jiff = { version = "^1", features = ["serde"] }
+chrono = { version = "^0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+# SQL substrate
+sqlx = { version = "^0.9", default-features = false }
+pgvector = { version = "^0.4" }
+jiff-sqlx = { version = "^1" }
+futures-util = { version = "^0.3", default-features = false }
+
+# KV
+redb = { version = "^4" }
+
+# uuid
+uuid = { version = "^1", features = ["v4", "v5", "serde"] }
+
+# macro infrastructure
+syn = "^2"
+quote = "^1"
+proc-macro2 = "^1"
+
+# error
+thiserror = "^2"
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+missing_docs = "warn"

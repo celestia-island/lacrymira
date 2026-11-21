@@ -1,0 +1,36 @@
+[package]
+name = "lacrymira-pg"
+description = "PostgreSQL driver for lacrymira (sqlx 0.9, pgvector, jiff-sqlx 1.0)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+lacrymira-core = { workspace = true }
+sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json"] }
+pgvector = { workspace = true, optional = true, features = ["sqlx"] }
+jiff-sqlx = { workspace = true, optional = true, features = ["postgres"] }
+jiff = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true, features = ["std"] }
+tokio = { version = "^1", features = ["rt", "macros"], optional = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["postgres"]
+postgres = ["dep:sqlx", "dep:tokio", "dep:jiff-sqlx", "dep:serde_json", "dep:futures-util"]
+pgvector = ["postgres", "dep:pgvector"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+rmp-serde = { workspace = true }
+lacrymira-macros = { workspace = true }
+tokio = { version = "^1", features = ["rt", "macros", "rt-multi-thread"] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
