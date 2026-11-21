@@ -9,7 +9,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-lacrymira-core = { workspace = true }
+lacrymira = { workspace = true }
 sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json"] }
 pgvector = { workspace = true, optional = true, features = ["sqlx"] }
 jiff-sqlx = { workspace = true, optional = true, features = ["postgres"] }

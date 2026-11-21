@@ -7,7 +7,7 @@
 //! verbatim as a database error, so host-side driver classifications can
 //! never collide with the reserved names.
 
-use lacrymira_core::{Command, Error, KvOp, Reply, Value};
+use lacrymira::{Command, Error, KvOp, Reply, Value};
 use lacrymira_wasi::{host_serve_bytes, ErrorInfo, HostTransport, WasiExecutor, KIND_DECODE};
 
 fn kv_get() -> Command {

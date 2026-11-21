@@ -34,57 +34,48 @@ mod without_json {
 
 #[test]
 fn json_entity_json_get_works() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
     let cond = with_json::Column::Metadata
         .json_get("$.user.name")
         .eq("John");
     let inner = cond.into_inner();
-    assert!(matches!(
-        inner,
-        lacrymira_core::Condition::JsonGetEq(_, _, _)
-    ));
+    assert!(matches!(inner, lacrymira::Condition::JsonGetEq(_, _, _)));
 }
 
 #[test]
 fn json_entity_json_exists_works() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
     let cond = with_json::Column::Metadata.json_exists("$.notifications.email");
     let inner = cond.into_inner();
-    assert!(matches!(inner, lacrymira_core::Condition::JsonExists(_, _)));
+    assert!(matches!(inner, lacrymira::Condition::JsonExists(_, _)));
 }
 
 #[test]
 fn json_entity_json_contains_works() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
     let cond = with_json::Column::Metadata.json_contains(serde_json::json!({"a": 1}));
     let inner = cond.into_inner();
-    assert!(matches!(
-        inner,
-        lacrymira_core::Condition::JsonContains(_, _)
-    ));
+    assert!(matches!(inner, lacrymira::Condition::JsonContains(_, _)));
 }
 
 #[test]
 fn json_entity_jsonb_path_match_works() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
     let cond = with_json::Column::Metadata
         .jsonb_path_match("$.type == $t", serde_json::json!({"t": "alert"}));
     let inner = cond.into_inner();
     assert!(matches!(
         inner,
-        lacrymira_core::Condition::JsonbPathMatch(_, _, _)
+        lacrymira::Condition::JsonbPathMatch(_, _, _)
     ));
 }
 
 #[test]
 fn json_entity_typed_select_with_json() {
-    use lacrymira_core::{Select, TypedJsonColumnOps};
+    use lacrymira::{Select, TypedJsonColumnOps};
     let q = Select::<with_json::Model>::new()
         .filter(with_json::Column::Metadata.json_get("$.theme").eq("dark"));
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
 
 // ── Entity WITHOUT JSON column: json methods are NOT available ──
@@ -93,7 +84,7 @@ fn json_entity_typed_select_with_json() {
 // for entities without serde_json::Value fields ):
 //
 // ```rust
-// use lacrymira_core::TypedJsonColumnOps;
+// use lacrymira::TypedJsonColumnOps;
 // let cond = without_json::Column::Name.json_get("$.x").eq("y");
 // //           ^^^^^^^^^^^^^^^^^^^^^^^^ method `json_get` not found
 // //                                  (trait TypedJsonColumnOps not implemented
@@ -105,22 +96,16 @@ fn json_entity_typed_select_with_json() {
 
 #[test]
 fn non_json_entity_regular_ops_still_work() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
     let q = Select::<without_json::Model>::new().filter(without_json::Column::Name.eq("test"));
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
 
 #[test]
 fn non_json_entity_select_with_filter() {
-    use lacrymira_core::{Select, TypedColumnOps};
+    use lacrymira::{Select, TypedColumnOps};
     let q = Select::<without_json::Model>::new()
         .filter(without_json::Column::Count.gt(10))
         .filter(without_json::Column::Name.like("%x%"));
-    assert!(matches!(
-        q.to_command(),
-        lacrymira_core::Command::Select { .. }
-    ));
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }

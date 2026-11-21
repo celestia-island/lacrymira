@@ -4,7 +4,7 @@
 //! build a typed Select via the derive macro, convert to Command, render to
 //! SQL, and verify the output matches expected PostgreSQL syntax.
 
-use lacrymira_core::{LockMode, Select, TypedColumnOps};
+use lacrymira::{LockMode, Select, TypedColumnOps};
 use lacrymira_pg::render;
 
 mod ledger {
@@ -59,7 +59,7 @@ fn typed_select_renders_correct_sql() {
 
 #[test]
 fn typed_select_with_lock_and_jsonb() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
 
     let cmd = Select::<ledger::Model>::new()
         .filter(ledger::Column::Metadata.json_get("$.status").eq("active"))
@@ -107,7 +107,7 @@ fn dynamic_composition_renders_and_conditions() {
 
 #[test]
 fn all_typed_operators_render_without_error() {
-    use lacrymira_core::TypedJsonColumnOps;
+    use lacrymira::TypedJsonColumnOps;
 
     // Each operator produces a condition that renders successfully
     let conditions = vec![
@@ -130,7 +130,7 @@ fn all_typed_operators_render_without_error() {
 
     for cond in conditions {
         let cmd = Select::<ledger::Model>::new()
-            .filter(lacrymira_core::TypedCondition::<ledger::Model>::from(cond))
+            .filter(lacrymira::TypedCondition::<ledger::Model>::from(cond))
             .to_command();
         let result = render(&cmd);
         assert!(result.is_ok(), "failed to render: {:?}", result.err());
@@ -141,7 +141,7 @@ fn all_typed_operators_render_without_error() {
 
 #[test]
 fn typed_delete_renders() {
-    let cmd = lacrymira_core::Command::Delete {
+    let cmd = lacrymira::Command::Delete {
         table: "billing_ledger".into(),
         filter: Some(ledger::Column::EntryType.eq("void").into_inner()),
     };
@@ -158,7 +158,7 @@ fn typed_delete_renders() {
 
 #[test]
 fn index_builder_produces_valid_migration_sql() {
-    use lacrymira_core::IndexBuilder;
+    use lacrymira::IndexBuilder;
 
     let index_sql = IndexBuilder::on("billing_ledger")
         .columns(&["user_id", "entry_type"])
@@ -189,7 +189,7 @@ fn index_builder_produces_valid_migration_sql() {
 
 #[test]
 fn insert_policy_generates_uuid_and_renders() {
-    use lacrymira_core::{Command, InsertPolicy, Value};
+    use lacrymira::{Command, InsertPolicy, Value};
 
     let policy = InsertPolicy::v4();
     let uuid = policy.generate_uuid(None).unwrap();
@@ -214,11 +214,11 @@ fn insert_policy_generates_uuid_and_renders() {
 #[test]
 fn version_conflict_error_is_serializable() {
     // The error must survive msgpack round-trip to cross the wit boundary
-    let err = lacrymira_core::Error::VersionConflict {
+    let err = lacrymira::Error::VersionConflict {
         expected: 1,
         actual: 5,
     };
     let bytes = rmp_serde::to_vec(&err).unwrap();
-    let back: lacrymira_core::Error = rmp_serde::from_slice(&bytes).unwrap();
+    let back: lacrymira::Error = rmp_serde::from_slice(&bytes).unwrap();
     assert_eq!(back, err);
 }

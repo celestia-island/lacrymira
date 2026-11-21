@@ -1,6 +1,6 @@
 //! Tests for the PostgreSQL SQL renderer.
 
-use lacrymira_core::*;
+use lacrymira::*;
 use lacrymira_pg::render;
 
 #[test]

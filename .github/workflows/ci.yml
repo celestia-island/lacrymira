@@ -29,7 +29,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
-      - run: cargo build --target wasm32-wasip2 --release -p lacrymira-core -p lacrymira-redb -p lacrymira-wasi
+      - run: cargo build --target wasm32-wasip2 --release -p lacrymira -p lacrymira-redb -p lacrymira-wasi
 
   tokio-zero:
     runs-on: [self-hosted, linux, x64, local]
@@ -41,7 +41,7 @@ jobs:
           targets: wasm32-wasip2
       - name: Verify zero tokio in WASI tree
         run: |
-          count=$(cargo tree -p lacrymira-core -p lacrymira-redb -p lacrymira-wasi \
+          count=$(cargo tree -p lacrymira -p lacrymira-redb -p lacrymira-wasi \
             --target wasm32-wasip2 --no-dev-dependencies 2>/dev/null | grep -c tokio || true)
           if [ "$count" -gt 0 ]; then
             echo "FAIL: $count tokio references found in WASI dependency tree"

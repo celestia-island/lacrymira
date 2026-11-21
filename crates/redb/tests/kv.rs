@@ -1,6 +1,6 @@
 //! Tests for the redb KV driver.
 
-use lacrymira_core::*;
+use lacrymira::*;
 use lacrymira_redb::RedbStore;
 
 fn store() -> RedbStore {
