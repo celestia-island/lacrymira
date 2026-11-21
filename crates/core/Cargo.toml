@@ -1,0 +1,24 @@
+[package]
+name = "lacrymira-core"
+description = "Entity, Column, Condition, Command, Reply — the backend-neutral core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+rmp-serde = { workspace = true }
+jiff = { workspace = true }
+chrono = { workspace = true, optional = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["jiff"]
+jiff = []
+chrono = ["dep:chrono"]
+
+[lints]
+workspace = true

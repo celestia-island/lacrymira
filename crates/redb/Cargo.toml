@@ -1,0 +1,23 @@
+[package]
+name = "lacrymira-redb"
+description = "redb KV driver for lacrymira — runs natively and in WASI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+lacrymira-core = { workspace = true }
+redb = { workspace = true, optional = true }
+serde = { workspace = true }
+rmp-serde = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["redb"]
+redb = ["dep:redb"]
+
+[lints]
+workspace = true
