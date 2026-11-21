@@ -772,71 +772,25 @@ impl PgExecutor {
 /// irrelevant — physical order ≠ declaration order in general).
 fn row_to_model<E: lacrymira::Entity>(row: &PgRow) -> Result<E::Model, Error> {
     use sqlx::Column as _;
-    let columns: Vec<String> = row.columns().iter().map(|c| c.name().to_string()).collect();
-    let mut values: Vec<lacrymira::Value> = Vec::with_capacity(columns.len());
-    for name in &columns {
-        values.push(pg_value_to_value(row, name)?);
-    }
-    // Map physical order → declaration order via E::COLUMNS
+    let columns = row.columns();
+    // Map physical order → declaration order via E::COLUMNS, decoding each
+    // cell through the OID-dispatching `decode_cell` — the same decoder the
+    // Command path uses — so timestamps, dates, and every supported type
+    // decode identically here (G-erp-10: the old per-name guessing chain had
+    // no timestamp arm and failed every entity with a created_at).
     let mut ordered: Vec<lacrymira::Value> = vec![lacrymira::Value::Null; E::COLUMNS.len()];
-    for (i, name) in columns.iter().enumerate() {
-        if let Some(pos) = E::COLUMNS.iter().position(|c| c == name) {
-            ordered[pos] = values[i].clone();
+    for (idx, column) in columns.iter().enumerate() {
+        if let Some(pos) = E::COLUMNS.iter().position(|c| *c == column.name()) {
+            ordered[pos] = decode_cell(row, idx)?;
         }
     }
     E::from_values(&ordered).ok_or_else(|| {
         Error::Decode(format!(
             "row does not fit entity {} (columns: {:?})",
             E::TABLE,
-            columns
+            columns.iter().map(|c| c.name()).collect::<Vec<_>>()
         ))
     })
-}
-
-fn pg_value_to_value(row: &PgRow, name: &str) -> Result<lacrymira::Value, Error> {
-    // Try common decodes in order; NULL first.
-    if row.try_get::<Option<i64>, _>(name).is_err() {
-        // column exists but type may differ; fallthrough
-    }
-    if let Ok(v) = row.try_get::<Option<i64>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::I64)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<i32>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::I32)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<f64>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::F64)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<bool>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::Bool)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<String>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::Text)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<Vec<u8>>, _>(name) {
-        return Ok(v
-            .map(lacrymira::Value::Bytes)
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    if let Ok(v) = row.try_get::<Option<uuid::Uuid>, _>(name) {
-        return Ok(v
-            .map(|u| lacrymira::Value::Uuid(u.to_string()))
-            .unwrap_or(lacrymira::Value::Null));
-    }
-    Err(Error::Decode(format!(
-        "unsupported column type for {:?}",
-        name
-    )))
 }
 
 impl PgExecutor {
