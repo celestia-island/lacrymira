@@ -268,3 +268,32 @@ mod chrono_ts {
         assert!(<chrono::DateTime<chrono::Utc> as TryFrom<Value>>::try_from(v).is_err());
     }
 }
+
+#[cfg(feature = "chrono")]
+mod chrono_opt_encode {
+    use lacrymira::Value;
+
+    #[test]
+    fn option_chrono_encode_some_and_none() {
+        let dt = chrono::Utc::now();
+        let v = Value::from(&Some(dt));
+        assert!(matches!(v, Value::Timestamp(_)));
+        let back: chrono::DateTime<chrono::Utc> = v.try_into().unwrap();
+        assert_eq!(back, dt);
+
+        let none: Option<chrono::DateTime<chrono::Utc>> = None;
+        assert!(matches!(Value::from(&none), Value::Null));
+    }
+
+    #[test]
+    fn option_jiff_encode_some_and_none() {
+        let ts = jiff::Timestamp::now();
+        let v = Value::from(&Some(ts));
+        assert!(matches!(v, Value::Timestamp(_)));
+        let back: jiff::Timestamp = v.try_into().unwrap();
+        assert_eq!(back, ts);
+
+        let none: Option<jiff::Timestamp> = None;
+        assert!(matches!(Value::from(&none), Value::Null));
+    }
+}
