@@ -185,3 +185,24 @@ impl TryFrom<Value> for Option<uuid::Uuid> {
         }
     }
 }
+
+/// Conversions between `jiff::Timestamp` and [`Value`] (RFC3339 wire form),
+/// gated on the default-on `jiff` feature.
+#[cfg(feature = "jiff")]
+impl From<&jiff::Timestamp> for Value {
+    fn from(v: &jiff::Timestamp) -> Self {
+        Value::Timestamp(v.to_string())
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl TryFrom<Value> for jiff::Timestamp {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        use std::str::FromStr;
+        match v {
+            Value::Timestamp(s) | Value::Text(s) => jiff::Timestamp::from_str(&s).map_err(|_| ()),
+            _ => Err(()),
+        }
+    }
+}

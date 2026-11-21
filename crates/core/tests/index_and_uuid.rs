@@ -200,3 +200,31 @@ fn bytes_ref_round_trip() {
     let back: Vec<u8> = v.try_into().unwrap();
     assert_eq!(back, b);
 }
+
+#[cfg(feature = "jiff")]
+mod jiff_ts {
+    use lacrymira::Value;
+
+    #[test]
+    fn timestamp_round_trip() {
+        let ts = jiff::Timestamp::now();
+        let v = Value::from(&ts);
+        assert!(matches!(v, Value::Timestamp(_)));
+        let back: jiff::Timestamp = v.try_into().unwrap();
+        assert_eq!(back, ts);
+    }
+
+    #[test]
+    fn timestamp_from_text_rfc3339() {
+        let raw = "2026-11-22T00:00:00Z";
+        let v = Value::Text(raw.into());
+        let back: jiff::Timestamp = v.try_into().unwrap();
+        assert_eq!(back, raw.parse::<jiff::Timestamp>().unwrap());
+    }
+
+    #[test]
+    fn timestamp_wrong_variant_fails() {
+        let v = Value::I64(1);
+        assert!(<jiff::Timestamp as TryFrom<Value>>::try_from(v).is_err());
+    }
+}
