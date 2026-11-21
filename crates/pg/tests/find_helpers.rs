@@ -196,3 +196,25 @@ fn update_active_sql_shape() {
     assert!(sql.contains(r#""id" = $2"#), "{}", sql);
     assert!(sql.ends_with("RETURNING *"));
 }
+
+#[test]
+fn upsert_command_renders_do_update() {
+    let cmd = lacrymira::Command::Insert {
+        table: "articles".into(),
+        columns: vec!["id".into(), "title".into(), "views".into()],
+        rows: vec![vec![
+            lacrymira::Value::I64(1),
+            lacrymira::Value::Text("T".into()),
+            lacrymira::Value::I32(0),
+        ]],
+        on_conflict: Some(lacrymira::OnConflict {
+            target: vec!["id".into()],
+            action: lacrymira::ConflictAction::DoUpdate {
+                set: vec![("views".into(), lacrymira::Value::I32(1))],
+            },
+        }),
+    };
+    let rendered = lacrymira_pg::render(&cmd).unwrap();
+    assert!(rendered.sql.contains("ON CONFLICT"), "{}", rendered.sql);
+    assert!(rendered.sql.contains("DO UPDATE"), "{}", rendered.sql);
+}

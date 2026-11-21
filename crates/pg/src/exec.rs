@@ -1033,3 +1033,39 @@ impl PgExecutor {
             .and_then(|r| row_to_model::<E>(r))
     }
 }
+
+// ── G17: upsert helper (INSERT … ON CONFLICT … DO UPDATE) ──
+
+impl PgExecutor {
+    /// Insert a full Model with an ON CONFLICT upsert; returns the stored row.
+    ///
+    /// `target` is the conflict target column; `update_sets` are the
+    /// column/value pairs applied on conflict (`EXCLUDED.col` references in
+    /// the pair values are passed through verbatim by the renderer).
+    pub async fn upsert<E>(
+        &self,
+        model: &E::Model,
+        target: &str,
+        update_sets: Vec<(String, lacrymira::Value)>,
+    ) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let values = E::to_values(model);
+        let cmd = Command::Insert {
+            table: E::TABLE.to_string(),
+            columns: E::COLUMNS.iter().map(|c| c.to_string()).collect(),
+            rows: vec![values],
+            on_conflict: Some(lacrymira::OnConflict {
+                target: vec![target.to_string()],
+                action: lacrymira::ConflictAction::DoUpdate { set: update_sets },
+            }),
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or_else(|| Error::Decode("upsert returned no row".into()))
+            .and_then(|r| row_to_model::<E>(r))
+    }
+}
