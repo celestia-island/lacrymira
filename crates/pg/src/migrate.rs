@@ -62,8 +62,15 @@ pub struct MigrationResult {
 
 impl MigrationRunner {
     /// Create a runner with the given migrations (will be sorted by version).
-    pub fn new(mut migrations: Vec<Migration>) -> Self {
-        migrations.sort_by(|a, b| a.version.cmp(&b.version));
+    /// Build a runner that applies migrations **in the given order**.
+    ///
+    /// The runner does NOT sort — declaration order is execution order,
+    /// matching sea-orm's `MigratorTrait::migrations()` semantics. This is
+    /// deliberate: version strings are arbitrary (date-padded like
+    /// `m20260511_init` sorts lexicographically, but `m2_compliance` and
+    /// `m10_role_member` do NOT — `"m10"` sorts before `"m2"`), and history
+    /// is order-sensitive. Order your `Vec` the way the migrations must run.
+    pub fn new(migrations: Vec<Migration>) -> Self {
         MigrationRunner { migrations }
     }
 

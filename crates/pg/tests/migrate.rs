@@ -167,3 +167,38 @@ fn migrations_are_sorted_by_version() {
     // Internal ordering is enforced by the constructor
     // (verified by the DB tests which check applied order)
 }
+
+// ── Insertion order is execution order (no lexicographic sort) ──
+// Regression: celestia-erp's unpadded versions (m2, m10) got reordered —
+// "m10" sorts before "m2", running an UPDATE before its table existed.
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn unpadded_versions_apply_in_declaration_order() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _order_probe, seaql_migrations")
+        .execute(&pool)
+        .await
+        .expect("drop");
+
+    // m10 declared FIRST on purpose: a sorting runner would also put it
+    // first lexicographically, so we assert against m2-first declaration.
+    let runner = MigrationRunner::new(vec![
+        Migration::new(
+            "m2_compliance",
+            "create probe",
+            "CREATE TABLE _order_probe (id INT, phase TEXT)",
+        ),
+        Migration::new(
+            "m10_role_member",
+            "populate",
+            "INSERT INTO _order_probe VALUES (1, 'post-create')",
+        ),
+    ]);
+    let result = runner.up(&pool).await.expect("up");
+    // Both applied, in the order they were declared — m2 before m10 even
+    // though "m10" < "m2" lexicographically.
+    assert_eq!(result.applied.len(), 2);
+    assert_eq!(result.applied[0], "m2_compliance");
+    assert_eq!(result.applied[1], "m10_role_member");
+}
