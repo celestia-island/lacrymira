@@ -285,3 +285,57 @@ impl From<&serde_json::Value> for Value {
         Value::Json(v.to_string())
     }
 }
+
+impl From<&uuid::Uuid> for Value {
+    fn from(v: &uuid::Uuid) -> Self {
+        Value::Uuid(v.to_string())
+    }
+}
+impl From<&Option<String>> for Value {
+    fn from(v: &Option<String>) -> Self {
+        match v {
+            Some(s) => Value::Text(s.clone()),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<i64>> for Value {
+    fn from(v: &Option<i64>) -> Self {
+        match v {
+            Some(x) => Value::I64(*x),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<i32>> for Value {
+    fn from(v: &Option<i32>) -> Self {
+        match v {
+            Some(x) => Value::I32(*x),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<bool>> for Value {
+    fn from(v: &Option<bool>) -> Self {
+        match v {
+            Some(x) => Value::Bool(*x),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<f64>> for Value {
+    fn from(v: &Option<f64>) -> Self {
+        match v {
+            Some(x) => Value::F64(*x),
+            None => Value::Null,
+        }
+    }
+}
+impl From<&Option<uuid::Uuid>> for Value {
+    fn from(v: &Option<uuid::Uuid>) -> Self {
+        match v {
+            Some(u) => Value::Uuid(u.to_string()),
+            None => Value::Null,
+        }
+    }
+}
