@@ -27,15 +27,15 @@ rmp-serde = "^1"
 
 # time (jiff first, chrono opt-in)
 jiff = { version = "^1", features = ["serde"] }
-chrono = { version = "^0.4", default-features = false, features = ["clock", "serde", "std"], optional = true }
+chrono = { version = "^0.4", default-features = false, features = ["clock", "serde", "std"] }
 
 # SQL substrate
-sqlx = { version = "^0.9", default-features = false, optional = true }
-pgvector = { version = "^0.4", optional = true }
-jiff-sqlx = { version = "^1", optional = true }
+sqlx = { version = "^0.9", default-features = false }
+pgvector = { version = "^0.4" }
+jiff-sqlx = { version = "^1" }
 
 # KV
-redb = { version = "^4", optional = true }
+redb = { version = "^4" }
 
 # macro infrastructure
 syn = "^2"
