@@ -14,7 +14,10 @@ rmp-serde = { workspace = true }
 jiff = { workspace = true }
 chrono = { workspace = true, optional = true }
 thiserror = { workspace = true }
+lacrymira-macros = { workspace = true }
 uuid = { version = "^1", features = ["v4", "serde"] }
+
+[dev-dependencies]
 
 [features]
 default = ["jiff"]

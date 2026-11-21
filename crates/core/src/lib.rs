@@ -24,3 +24,6 @@ pub use field::Field;
 pub use reply::Reply;
 pub use select::Select;
 pub use value::Value;
+
+/// Re-export the derive macro for convenience.
+pub use lacrymira_macros::Entity;

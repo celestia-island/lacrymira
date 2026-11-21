@@ -4,8 +4,6 @@
 pub trait ColumnTrait {
     /// The entity this column belongs to.
     type Entity: Entity;
-    /// The column name as it appears in SQL.
-    const NAME: &'static str;
 }
 
 /// The primary-key shape for an entity.
