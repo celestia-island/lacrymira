@@ -53,6 +53,11 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira_core::Error> {
             if let Some(o) = offset {
                 sql.push_str(&format!(" OFFSET {}", o));
             }
+            // Pessimistic lock clause (FOR UPDATE family)
+            if let Some(ref lock_req) = lock_request {
+                sql.push(' ');
+                sql.push_str(lock_req.sql());
+            }
             Ok(Rendered {
                 sql,
                 params: ctx.params,
@@ -237,7 +242,29 @@ impl RenderCtx {
                 ))
             }
             Condition::JsonExists(col, path) => {
-                Ok(format!("{} ? '{}'", quote_ident(&col.name), path))
+                // $.a.b.c → col->'a'->'b' ? 'c'
+                // $.a → col ? 'a'
+                let segments: Vec<&str> = path
+                    .trim_start_matches('$')
+                    .trim_start_matches('.')
+                    .split('.')
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if segments.len() <= 1 {
+                    Ok(format!("{} ?", quote_ident(&col.name)))
+                } else {
+                    let (parents, last) = segments.split_at(segments.len() - 1);
+                    let chain = parents
+                        .iter()
+                        .map(|s| format!("->'{}'", s))
+                        .collect::<String>();
+                    Ok(format!(
+                        "{}{} ? '{}'",
+                        quote_ident(&col.name),
+                        chain,
+                        last[0]
+                    ))
+                }
             }
             Condition::JsonContains(col, v) => {
                 self.bind(v.clone());
