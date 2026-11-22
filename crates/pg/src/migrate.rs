@@ -16,10 +16,27 @@
 //! This means it can be dropped into a database that sea-orm has been
 //! migrating, and it will pick up exactly where sea-orm left off.
 
+use std::pin::Pin;
+
 use lacrymira::Error;
 
+/// A boxed async migration body: runs inside the migration transaction.
+///
+/// Receives the transaction so data migrations do their work in the same
+/// atomic scope as the bookkeeping row (a failure rolls both back).
+pub type MigrationFuture<'a> =
+    Pin<Box<dyn std::future::Future<Output = Result<(), Error>> + Send + 'a>>;
+
+/// A Rust data-migration step (the "code lane").
+///
+/// Some migrations cannot be expressed as static SQL — they read rows and
+/// write derived ones, or branch on what they find. This is the door for
+/// those: a closure that receives the open transaction.
+pub type MigrationFn =
+    std::sync::Arc<dyn for<'a> Fn(&'a mut sqlx::PgConnection) -> MigrationFuture<'a> + Send + Sync>;
+
 /// A single migration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Migration {
     /// The version string (must be unique, e.g. "20261121000001").
     pub version: String,
@@ -27,10 +44,39 @@ pub struct Migration {
     pub description: String,
     /// The SQL to execute (multiple statements separated by `;`).
     pub sql: String,
+    /// The roll-back SQL. Executed by [`MigrationRunner::down`]; empty
+    /// means "no down lane" and `down` skips it.
+    pub down_sql: String,
+    /// Optional Rust body (the code lane). Runs BEFORE `sql` inside the
+    /// same transaction.
+    pub code: Option<MigrationFn>,
+}
+
+impl std::fmt::Debug for Migration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Migration")
+            .field("version", &self.version)
+            .field("description", &self.description)
+            .field("sql_len", &self.sql.len())
+            .field("down_sql_len", &self.down_sql.len())
+            .field("has_code", &self.code.is_some())
+            .finish()
+    }
 }
 
 impl Migration {
-    /// Create a new migration from version, description, and SQL.
+    /// Attach a Rust data-migration body (the code lane).
+    ///
+    /// The closure runs inside the migration's transaction, before `sql`.
+    pub fn with_code<F>(mut self, f: F) -> Self
+    where
+        F: for<'a> Fn(&'a mut sqlx::PgConnection) -> MigrationFuture<'a> + Send + Sync + 'static,
+    {
+        self.code = Some(std::sync::Arc::new(f));
+        self
+    }
+
+    /// Create a new migration from version, description, and SQL (no down).
     pub fn new(
         version: impl Into<String>,
         description: impl Into<String>,
@@ -40,7 +86,15 @@ impl Migration {
             version: version.into(),
             description: description.into(),
             sql: sql.into(),
+            down_sql: String::new(),
+            code: None,
         }
+    }
+
+    /// Attach a roll-back SQL to this migration.
+    pub fn with_down(mut self, down_sql: impl Into<String>) -> Self {
+        self.down_sql = down_sql.into();
+        self
     }
 }
 
@@ -83,12 +137,62 @@ impl MigrationRunner {
         MigrationRunner::new(vec![Migration::new(version, "baseline schema", sql)])
     }
 
+    /// Roll back the most recent `steps` applied migrations.
+    ///
+    /// Walks the registered set in REVERSE declaration order; for each
+    /// recorded version whose `down_sql` is non-empty, executes it in a
+    /// transaction and deletes the bookkeeping row. Recorded versions
+    /// without a down lane (empty `down_sql`) are skipped without error —
+    /// the caller sees them in the result's `skipped` list.
+    pub async fn down(&self, pool: &sqlx::PgPool, steps: u32) -> Result<MigrationResult, Error> {
+        let recorded: Vec<(String,)> = sqlx::query_as("SELECT version FROM seaql_migrations")
+            .fetch_all(pool)
+            .await
+            .map_err(map_sqlx)?;
+        let recorded_set: std::collections::HashSet<String> =
+            recorded.into_iter().map(|(v,)| v).collect();
+
+        let mut rolled_back = Vec::new();
+        let mut skipped = Vec::new();
+
+        for migration in self.migrations.iter().rev() {
+            if rolled_back.len() as u32 >= steps {
+                break;
+            }
+            if !recorded_set.contains(&migration.version) {
+                continue;
+            }
+            if migration.down_sql.is_empty() {
+                skipped.push(migration.version.clone());
+                continue;
+            }
+            let mut tx = pool.begin().await.map_err(map_sqlx)?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(migration.down_sql.as_str()))
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx)?;
+            sqlx::query("DELETE FROM seaql_migrations WHERE version = $1")
+                .bind(&migration.version)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx)?;
+            tx.commit().await.map_err(map_sqlx)?;
+            rolled_back.push(migration.version.clone());
+        }
+
+        Ok(MigrationResult {
+            applied: rolled_back,
+            skipped,
+            pre_history: Vec::new(),
+        })
+    }
+
     /// Run all pending migrations against the given pool.
     pub async fn up(&self, pool: &sqlx::PgPool) -> Result<MigrationResult, Error> {
         // 1. Ensure the bookkeeping table exists (same shape as sea-orm)
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS seaql_migrations (
-                version TEXT PRIMARY KEY,
+                version VARCHAR(255) PRIMARY KEY,
                 applied_at BIGINT NOT NULL
             )",
         )
@@ -125,18 +229,26 @@ impl MigrationRunner {
                 continue;
             }
 
-            // Execute the migration SQL in a transaction
+            // Execute the migration in a transaction: the Rust body first
+            // (when present), then the literal SQL.
             let mut tx = pool.begin().await.map_err(map_sqlx)?;
-            sqlx::raw_sql(sqlx::AssertSqlSafe(migration.sql.as_str()))
-                .execute(&mut *tx)
-                .await
-                .map_err(map_sqlx)?;
+            if let Some(code) = &migration.code {
+                code(&mut tx).await?;
+            }
+            if !migration.sql.is_empty() {
+                sqlx::raw_sql(sqlx::AssertSqlSafe(migration.sql.as_str()))
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(map_sqlx)?;
+            }
 
             // Record it
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_millis() as i64;
+                // sea-orm records applied_at in SECONDS — keep the unit
+                // identical so a mixed-era table stays comparable.
+                .as_secs() as i64;
             sqlx::query("INSERT INTO seaql_migrations (version, applied_at) VALUES ($1, $2)")
                 .bind(&migration.version)
                 .bind(now)

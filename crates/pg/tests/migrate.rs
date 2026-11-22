@@ -151,7 +151,10 @@ async fn bookkeeping_table_matches_sea_orm_format() {
     ).fetch_all(&pool).await.expect("check columns");
 
     assert_eq!(cols.len(), 2);
-    assert_eq!(cols[0], ("version".to_owned(), "text".to_owned()));
+    assert_eq!(
+        cols[0],
+        ("version".to_owned(), "character varying".to_owned())
+    );
     assert_eq!(cols[1], ("applied_at".to_owned(), "bigint".to_owned()));
 }
 
@@ -201,4 +204,189 @@ async fn unpadded_versions_apply_in_declaration_order() {
     assert_eq!(result.applied.len(), 2);
     assert_eq!(result.applied[0], "m2_compliance");
     assert_eq!(result.applied[1], "m10_role_member");
+}
+
+// ── C8: down lane + C9 bookkeeping alignment ──
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn down_rolls_back_in_reverse_order() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _down_t")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let runner = MigrationRunner::new(vec![
+        Migration::new("d001", "create", "CREATE TABLE _down_t (id INT)")
+            .with_down("DROP TABLE IF EXISTS _down_t"),
+        Migration::new("d002", "alter", "ALTER TABLE _down_t ADD COLUMN note TEXT")
+            .with_down("ALTER TABLE _down_t DROP COLUMN IF EXISTS note"),
+        Migration::new("d003", "index", "CREATE INDEX _down_idx ON _down_t (id)")
+            .with_down("DROP INDEX IF EXISTS _down_idx"),
+    ]);
+
+    runner.up(&pool).await.expect("up");
+    let after_up: Vec<(String,)> =
+        sqlx::query_as("SELECT version FROM seaql_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_up.len(), 3);
+
+    // down(2): rolls d003 then d002, in reverse
+    let result = runner.down(&pool, 2).await.expect("down");
+    assert_eq!(result.applied, vec!["d003".to_string(), "d002".to_string()]);
+    // d001 still recorded; _down_t exists WITHOUT note
+    let cols: Vec<(String,)> = sqlx::query_as(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = '_down_t'",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cols.len(), 1, "note rolled back");
+
+    // down(1) again: rolls d001, table gone
+    let result2 = runner.down(&pool, 1).await.expect("down2");
+    assert_eq!(result2.applied, vec!["d001".to_string()]);
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM seaql_migrations")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn down_skips_empty_down_sql_without_error() {
+    let pool = fresh_pool().await;
+    for drop in [
+        "DROP TABLE IF EXISTS _skip_t",
+        "DROP TABLE IF EXISTS _skip_u",
+    ] {
+        sqlx::query(drop).execute(&pool).await.unwrap();
+    }
+    let runner = MigrationRunner::new(vec![
+        Migration::new("s001", "no-down", "CREATE TABLE _skip_t (id INT)"),
+        Migration::new("s002", "has-down", "CREATE TABLE _skip_u (id INT)")
+            .with_down("DROP TABLE IF EXISTS _skip_u"),
+    ]);
+    runner.up(&pool).await.expect("up");
+    let result = runner.down(&pool, 5).await.expect("down");
+    assert_eq!(result.applied, vec!["s002".to_string()]);
+    assert_eq!(result.skipped, vec!["s001".to_string()]);
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn bookkeeping_column_type_is_varchar_and_seconds() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _bk_t")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let runner = MigrationRunner::new(vec![Migration::new(
+        "bk001",
+        "probe",
+        "CREATE TABLE _bk_t (id INT)",
+    )]);
+    runner.up(&pool).await.expect("up");
+    // sea-orm's exact DDL shape: version VARCHAR(255)
+    let ctype: String = sqlx::query_scalar(
+        "SELECT data_type FROM information_schema.columns WHERE table_name = 'seaql_migrations' AND column_name = 'version'"
+    ).fetch_one(&pool).await.unwrap();
+    assert_eq!(ctype, "character varying");
+    // applied_at is in SECONDS (sea-orm semantics) — ~1.7e9, not ~1.7e12
+    let ts: i64 =
+        sqlx::query_scalar("SELECT applied_at FROM seaql_migrations WHERE version = 'bk001'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(ts < 10_000_000_000, "seconds since epoch, got {ts}");
+}
+
+// ── C11: the Rust data-migration code lane ──
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn code_lane_runs_inside_the_migration_transaction() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _code_t")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let runner = MigrationRunner::new(vec![
+        // DDL first, then a Rust body that backfills derived rows.
+        Migration::new(
+            "c001",
+            "create",
+            "CREATE TABLE _code_t (id INT, doubled INT)",
+        )
+        .with_down("DROP TABLE IF EXISTS _code_t"),
+        Migration::new("c002", "backfill", "").with_code(|conn| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO _code_t VALUES (1, 2), (2, 4), (3, 6)")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| lacrymira::Error::Db {
+                        kind: "postgres".into(),
+                        message: e.to_string(),
+                        sqlstate: None,
+                    })?;
+                Ok(())
+            })
+        }),
+    ]);
+
+    let applied = runner.up(&pool).await.expect("up");
+    assert_eq!(
+        applied.applied,
+        vec!["c001".to_string(), "c002".to_string()]
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM _code_t")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 3, "the code lane backfilled three rows");
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn a_failing_code_body_rolls_back_the_whole_migration() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _code_fail")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let runner = MigrationRunner::new(vec![
+        Migration::new("f001", "create", "CREATE TABLE _code_fail (id INT)"),
+        Migration::new("f002", "boom", "INSERT INTO _code_fail VALUES (1)").with_code(|_conn| {
+            Box::pin(async move {
+                Err(lacrymira::Error::Config(
+                    "deliberate code-lane failure".into(),
+                ))
+            })
+        }),
+    ]);
+
+    let err = runner.up(&pool).await.expect_err("the code body fails");
+    assert!(
+        err.to_string().contains("deliberate code-lane failure"),
+        "{err}"
+    );
+    // f002's own SQL ran INSIDE the transaction the body failed in, so the
+    // insert rolled back with it; f001 (its own transaction) stays.
+    let recorded: Vec<(String,)> =
+        sqlx::query_as("SELECT version FROM seaql_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].0, "f001");
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM _code_fail")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "the failed migration's insert rolled back");
 }
