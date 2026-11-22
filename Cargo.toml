@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.2.0-rc.1"
 edition = "2021"
 rust-version = "1.94"
 authors = ["Celestia Island"]
@@ -18,8 +18,8 @@ license-file = "LICENSE"
 
 [workspace.dependencies]
 # internal
-lacrymira = { path = "crates/core", version = "^0.1" }
-lacrymira-macros = { path = "crates/macros", version = "^0.1" }
+lacrymira = { path = "crates/core", version = "^0.2.0-rc.1" }
+lacrymira-macros = { path = "crates/macros", version = "^0.2.0-rc.1" }
 
 # serialization (msgpack everywhere — 2026-11-21 user ruling)
 serde = { version = "^1", features = ["derive"] }
