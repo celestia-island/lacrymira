@@ -18,6 +18,7 @@ fn json_get_eq_renders_arrow_path() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -36,6 +37,7 @@ fn json_exists_renders_question_mark() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -54,6 +56,7 @@ fn json_contains_renders_at_gt() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""data" @> $1::jsonb"#), "got: {}", r.sql);
@@ -71,6 +74,7 @@ fn lock_update_renders_for_update() {
         limit: None,
         offset: None,
         lock: Some(LockMode::Update),
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.ends_with("FOR UPDATE"), "got: {}", r.sql);
@@ -85,6 +89,7 @@ fn lock_skip_locked_renders() {
         limit: Some(10),
         offset: None,
         lock: Some(LockMode::SkipLocked),
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.ends_with("FOR UPDATE SKIP LOCKED"), "got: {}", r.sql);
@@ -99,6 +104,7 @@ fn lock_nowait_renders() {
         limit: None,
         offset: None,
         lock: Some(LockMode::UpdateNoWait),
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.ends_with("FOR UPDATE NOWAIT"), "got: {}", r.sql);
@@ -113,6 +119,7 @@ fn lock_share_renders() {
         limit: None,
         offset: None,
         lock: Some(LockMode::Share),
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.ends_with("FOR SHARE"), "got: {}", r.sql);
@@ -127,6 +134,7 @@ fn no_lock_by_default() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -192,6 +200,7 @@ fn jsonb_condition_msgpack_round_trip() {
         limit: None,
         offset: None,
         lock: Some(LockMode::SkipLocked),
+        distinct: false,
     };
     let bytes = rmp_serde::to_vec(&cmd).unwrap();
     let back: Command = rmp_serde::from_slice(&bytes).unwrap();
@@ -209,6 +218,7 @@ fn empty_in_renders_false_without_binding() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -228,6 +238,7 @@ fn empty_not_in_renders_true_without_binding() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -247,6 +258,7 @@ fn nonempty_in_still_binds_any() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains("ANY($1)"), "{}", r.sql);

@@ -166,6 +166,11 @@ impl PgExecutor {
                 let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
                 rows_to_reply(&rows)
             }
+            // Aggregate SELECT returns rows like a plain SELECT.
+            Command::Aggregate { .. } => {
+                let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+                rows_to_reply(&rows)
+            }
             // COUNT(*) returns a single row with a single BIGINT column.
             Command::Count { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
@@ -1122,6 +1127,10 @@ impl PgTransaction {
                 let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
                 rows_to_reply(&rows)
             }
+            Command::Aggregate { .. } => {
+                let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+                rows_to_reply(&rows)
+            }
             Command::Count { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
                 let count: i64 = rows
@@ -1353,4 +1362,78 @@ pub(crate) fn parse_vector_param(s: &str) -> Result<Vec<f32>, Error> {
                 .map_err(|e| Error::Decode(format!("invalid vector element {p:?}: {e}")))
         })
         .collect()
+}
+
+// ── Offset + keyset pagination (batch B) ──
+
+impl PgExecutor {
+    /// Offset pagination: fetch `page` (1-based) of `page_size` rows plus
+    /// the total count, in two round trips.
+    pub async fn paginate<E>(
+        &self,
+        select: &lacrymira::Select<E>,
+        page: u64,
+        page_size: u64,
+    ) -> Result<lacrymira::Page<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let total = self.count::<E>(select_filter_of(select)).await?;
+        let pages = if page_size == 0 {
+            0
+        } else {
+            ((total + page_size as i64 - 1) / page_size as i64) as u64
+        };
+        let page = page.max(1);
+        let bounded = select
+            .clone_limit()
+            .limit(page_size)
+            .offset((page - 1) * page_size);
+        let rows = self.find_all(&bounded).await?;
+        Ok(lacrymira::Page {
+            rows,
+            total,
+            page,
+            pages,
+        })
+    }
+
+    /// Keyset (cursor) pagination: rows strictly after `after` on `key`,
+    /// ascending, plus the next cursor value (last row's key).
+    pub async fn cursor<E>(
+        &self,
+        select: &lacrymira::Select<E>,
+        key: &str,
+        after: Option<lacrymira::Value>,
+        size: u64,
+    ) -> Result<lacrymira::CursorBatch<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let mut q = select.clone_limit().order_by(key).limit(size);
+        if let Some(v) = after {
+            q = q.filter(lacrymira::ColumnRef::new(key).gt(v));
+        }
+        let rows = self.find_all(&q).await?;
+        let next = if rows.len() as u64 >= size {
+            rows.last()
+                .and_then(|m| E::to_values(m).into_iter().nth(key_index_of::<E>(key)))
+                .filter(|_| rows.len() as u64 == size)
+        } else {
+            None
+        };
+        Ok(lacrymira::CursorBatch { rows, next })
+    }
+}
+
+/// Extract the filter off a Select without consuming it.
+fn select_filter_of<E: lacrymira::Entity>(
+    s: &lacrymira::Select<E>,
+) -> Option<lacrymira::Condition> {
+    s.filter_clone()
+}
+
+/// Index of `key` in E::COLUMNS.
+fn key_index_of<E: lacrymira::Entity>(key: &str) -> usize {
+    E::COLUMNS.iter().position(|c| *c == key).unwrap_or(0)
 }

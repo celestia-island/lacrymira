@@ -179,6 +179,7 @@ fn non_kv_command_rejected() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     assert!(s.execute(&cmd).is_err());
 }

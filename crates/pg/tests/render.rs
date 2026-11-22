@@ -12,6 +12,7 @@ fn select_no_filter() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert_eq!(r.sql, r#"SELECT * FROM "users""#);
@@ -33,6 +34,7 @@ fn select_with_filter_order_limit() {
         limit: Some(10),
         offset: Some(20),
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""user_id" = $1"#), "got: {}", r.sql);
@@ -85,6 +87,7 @@ fn select_all_18_operators() {
             limit: None,
             offset: None,
             lock: None,
+            distinct: false,
         };
         let r = render(&cmd).unwrap();
         assert!(
@@ -195,6 +198,7 @@ fn nested_or_and() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(
@@ -213,6 +217,7 @@ fn null_equality_becomes_is_null() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""x" IS NULL"#), "got: {}", r.sql);
@@ -227,6 +232,7 @@ fn identifier_quoting_escapes_embedded_quotes() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#""weird""table""#), "got: {}", r.sql);
