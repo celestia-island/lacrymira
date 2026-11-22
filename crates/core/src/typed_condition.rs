@@ -219,3 +219,13 @@ impl<E: Entity> JsonPathTyped<E> {
         )))
     }
 }
+
+/// A typed column reference usable for ORDER BY / GROUP BY (no condition
+/// semantics — just the name, but carried through the entity's own Column
+/// type so a rename refactors it).
+pub trait TypedColumnName {
+    /// The entity this column belongs to (phantom, for future use).
+    type Entity: Entity;
+    /// The SQL column name.
+    fn col_name(&self) -> &'static str;
+}

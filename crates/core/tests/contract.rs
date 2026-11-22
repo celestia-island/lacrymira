@@ -65,6 +65,7 @@ fn command_select_round_trips() {
             limit: Some(10),
             offset: None,
             lock: None,
+            distinct: false,
         },
     );
 }
@@ -257,6 +258,7 @@ fn msgpack_encoding_is_deterministic() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     let a = rmp_serde::to_vec(&cmd).unwrap();
     let b = rmp_serde::to_vec(&cmd).unwrap();
@@ -286,6 +288,58 @@ fn command_count_no_filter_round_trips() {
         &Command::Count {
             table: "users".into(),
             filter: None,
+        },
+    );
+}
+
+#[test]
+fn command_aggregate_round_trips() {
+    assert_round_trip(
+        "Aggregate",
+        &Command::Aggregate {
+            table: "billing_ledger".into(),
+            select_expr: vec![
+                (
+                    lacrymira::AggExpr::Col("user_id".into()),
+                    Some("user_id".into()),
+                ),
+                (
+                    lacrymira::AggExpr::Sum("degrees".into()),
+                    Some("total".into()),
+                ),
+                (lacrymira::AggExpr::Count, None),
+            ],
+            group_by: vec!["user_id".into()],
+            having: Some(Condition::Gt(
+                ColumnRef {
+                    name: "total".into(),
+                },
+                Value::I64(100),
+            )),
+            filter: Some(Condition::Eq(
+                ColumnRef {
+                    name: "week_start".into(),
+                },
+                Value::Timestamp("2026-11-01T00:00:00Z".into()),
+            )),
+            order_by: vec![("total".into(), true)],
+            limit: Some(10),
+        },
+    );
+}
+
+#[test]
+fn command_select_distinct_round_trips() {
+    assert_round_trip(
+        "Select distinct",
+        &Command::Select {
+            table: "t".into(),
+            filter: None,
+            order_by: vec![],
+            limit: None,
+            offset: None,
+            lock: None,
+            distinct: true,
         },
     );
 }

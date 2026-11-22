@@ -33,7 +33,7 @@ pub mod select;
 pub mod typed_condition;
 pub mod value;
 
-pub use command::{Command, ConflictAction, Dialect, KvOp, OnConflict};
+pub use command::{AggExpr, Command, ConflictAction, Dialect, KvOp, OnConflict};
 pub use condition::{ColumnRef, Condition};
 pub use entity::{ColumnTrait, Entity, JsonColumn, PrimaryKey, VersionColumn};
 pub use error::Error;
@@ -42,8 +42,10 @@ pub use index::{IndexBuilder, IndexSpec};
 pub use insert_policy::{CollisionPolicy, InsertPolicy, UuidStrategy};
 pub use lock::LockMode;
 pub use reply::Reply;
-pub use select::Select;
-pub use typed_condition::{JsonPathTyped, TypedColumnOps, TypedCondition, TypedJsonColumnOps};
+pub use select::{CursorBatch, Page, Select};
+pub use typed_condition::{
+    JsonPathTyped, TypedColumnName, TypedColumnOps, TypedCondition, TypedJsonColumnOps,
+};
 pub use value::Value;
 
 // ── Derive macro（用户不再需要单独依赖 lacrymira-macros）──

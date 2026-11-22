@@ -80,6 +80,7 @@ fn select(table: &str) -> Command {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     }
 }
 
@@ -260,6 +261,7 @@ async fn crud_round_trip() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
 
     let (_, rows) = unpack(
@@ -317,6 +319,7 @@ async fn crud_round_trip() {
         limit: Some(1),
         offset: Some(1),
         lock: None,
+        distinct: false,
     };
     let (_, rows) = unpack(x.execute(&limited).await.expect("limit select"));
     assert_eq!(rows.len(), 1);
@@ -743,6 +746,7 @@ async fn decimal_numeric_column_round_trips() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     match executor.execute(&select).await.expect("select") {
         lacrymira::Reply::Rows { rows, .. } => {
@@ -795,6 +799,7 @@ async fn vector_column_round_trips() {
         limit: None,
         offset: None,
         lock: None,
+        distinct: false,
     };
     match executor.execute(&select).await.expect("select") {
         lacrymira::Reply::Rows { rows, .. } => {
@@ -805,4 +810,117 @@ async fn vector_column_round_trips() {
         }
         _ => panic!("expected rows"),
     }
+}
+
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn aggregate_and_pagination_e2e() {
+    use lacrymira::{AggExpr, Select};
+
+    mod org_row {
+        use lacrymira::DeriveEntity;
+        #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+        #[lacrymira(table = "_agg_e2e")]
+        pub struct Model {
+            #[lacrymira(primary_key)]
+            pub id: i64,
+            pub org: String,
+            pub amount: i64,
+        }
+    }
+
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _agg_e2e",
+        "CREATE TABLE _agg_e2e (id BIGSERIAL PRIMARY KEY, org TEXT, amount BIGINT)",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    // 3 orgs × 5 rows, amounts 1..=5 each
+    let rows: Vec<Vec<lacrymira::Value>> = (0..3)
+        .flat_map(|o| {
+            (1..=5i64).map(move |a| {
+                vec![
+                    lacrymira::Value::I64(o * 100 + a),
+                    lacrymira::Value::Text(format!("org{o}")),
+                    lacrymira::Value::I64(a),
+                ]
+            })
+        })
+        .collect();
+    executor
+        .execute(&lacrymira::Command::Insert {
+            table: "_agg_e2e".into(),
+            columns: vec!["id".into(), "org".into(), "amount".into()],
+            rows,
+            on_conflict: None,
+        })
+        .await
+        .expect("seed");
+
+    // ── Aggregate: SUM per org, HAVING sum > 10 ──
+    let agg = lacrymira::Command::Aggregate {
+        table: "_agg_e2e".into(),
+        select_expr: vec![
+            (AggExpr::Col("org".into()), Some("org".into())),
+            (AggExpr::Count, Some("n".into())),
+        ],
+        group_by: vec!["org".into()],
+        having: Some(lacrymira::Condition::Raw(
+            r#"SUM("amount") > ${}"#.to_string(),
+            vec![lacrymira::Value::I64(14)],
+        )),
+        filter: None,
+        order_by: vec![("org".into(), true)],
+        limit: None,
+    };
+    match executor.execute(&agg).await.expect("aggregate") {
+        lacrymira::Reply::Rows { rows, .. } => {
+            // sums are 15 per org; HAVING > 14 keeps all 3
+            assert_eq!(rows.len(), 3, "{rows:?}");
+            let n: i64 = rows[0][1].clone().try_into().unwrap();
+            assert_eq!(n, 5, "5 rows per org");
+            // ORDER BY org DESC → org2 first
+            let first_org: String = rows[0][0].clone().try_into().unwrap();
+            assert_eq!(first_org, "org2");
+        }
+        _ => panic!("expected rows"),
+    }
+
+    // ── paginate ──
+    let select = Select::<org_row::Model>::new().order_by("id");
+    let page = executor.paginate(&select, 2, 7).await.expect("page");
+    assert_eq!(page.total, 15);
+    assert_eq!(page.pages, 3);
+    assert_eq!(page.page, 2);
+    assert_eq!(page.rows.len(), 7);
+
+    // ── cursor ──
+    let batch1 = executor
+        .cursor(&select, "id", None, 6)
+        .await
+        .expect("cursor1");
+    assert_eq!(batch1.rows.len(), 6);
+    let next = batch1.next.expect("next cursor");
+    let batch2 = executor
+        .cursor(&select, "id", Some(next), 6)
+        .await
+        .expect("cursor2");
+    assert_eq!(batch2.rows.len(), 6);
+    let batch3 = executor
+        .cursor(&select, "id", batch2.next, 6)
+        .await
+        .expect("cursor3");
+    assert_eq!(batch3.rows.len(), 3);
+    assert!(batch3.next.is_none(), "exhausted");
 }

@@ -84,6 +84,28 @@ pub enum Command {
         offset: Option<u64>,
         /// Optional pessimistic lock (FOR UPDATE family).
         lock: Option<crate::lock::LockMode>,
+        /// SELECT DISTINCT.
+        distinct: bool,
+    },
+    /// Aggregating SELECT: projection expressions + GROUP BY + HAVING.
+    Aggregate {
+        /// The table name.
+        table: String,
+        /// Projection: (expression, optional alias) pairs. Expressions are
+        /// aggregate function calls (e.g. `SUM("amount")`, `COUNT(*)`)
+        /// or plain column references — rendered verbatim with identifier
+        /// quoting applied to `col(...)` spans by the renderer.
+        select_expr: Vec<(AggExpr, Option<String>)>,
+        /// GROUP BY columns.
+        group_by: Vec<String>,
+        /// Post-aggregation filter (HAVING).
+        having: Option<Condition>,
+        /// Pre-aggregation filter (WHERE).
+        filter: Option<Condition>,
+        /// ORDER BY (column-or-alias, is_desc) pairs.
+        order_by: Vec<(String, bool)>,
+        /// LIMIT.
+        limit: Option<u64>,
     },
     /// Count matching rows.
     Count {
@@ -148,4 +170,23 @@ pub enum ConflictAction {
         /// The column-value pairs to set on conflict.
         set: Vec<(String, Value)>,
     },
+}
+
+/// One projection expression in an aggregating SELECT.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AggExpr {
+    /// `COUNT(*)`
+    Count,
+    /// `COUNT("col")` (non-null rows of col)
+    CountCol(String),
+    /// `SUM("col")`
+    Sum(String),
+    /// `MIN("col")`
+    Min(String),
+    /// `MAX("col")`
+    Max(String),
+    /// `AVG("col")`
+    Avg(String),
+    /// A bare column reference (for GROUP BY passthrough projections).
+    Col(String),
 }

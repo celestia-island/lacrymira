@@ -26,8 +26,10 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
             limit,
             offset,
             lock: lock_request,
+            distinct,
         } => {
-            let mut sql = format!("SELECT * FROM {}", quote_ident(table));
+            let distinct_kw = if *distinct { "DISTINCT " } else { "" };
+            let mut sql = format!("SELECT {}* FROM {}", distinct_kw, quote_ident(table));
             if let Some(cond) = filter {
                 let where_clause = ctx.render_condition(cond)?;
                 sql.push_str(" WHERE ");
@@ -57,6 +59,84 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
             if let Some(ref lock_req) = lock_request {
                 sql.push(' ');
                 sql.push_str(lock_req.sql());
+            }
+            Ok(Rendered {
+                sql,
+                params: ctx.params,
+            })
+        }
+        Command::Aggregate {
+            table,
+            select_expr,
+            group_by,
+            having,
+            filter,
+            order_by,
+            limit,
+        } => {
+            let mut ctx = RenderCtx::new();
+            // Projection
+            let projections: Vec<String> = select_expr
+                .iter()
+                .map(|(expr, alias)| {
+                    let sql = match expr {
+                        lacrymira::AggExpr::Count => "COUNT(*)".to_string(),
+                        lacrymira::AggExpr::CountCol(c) => format!("COUNT({})", quote_ident(c)),
+                        lacrymira::AggExpr::Sum(c) => format!("SUM({})", quote_ident(c)),
+                        lacrymira::AggExpr::Min(c) => format!("MIN({})", quote_ident(c)),
+                        lacrymira::AggExpr::Max(c) => format!("MAX({})", quote_ident(c)),
+                        lacrymira::AggExpr::Avg(c) => format!("AVG({})", quote_ident(c)),
+                        lacrymira::AggExpr::Col(c) => quote_ident(c),
+                    };
+                    match alias {
+                        Some(a) => format!("{} AS {}", sql, quote_ident(a)),
+                        None => sql,
+                    }
+                })
+                .collect();
+            let mut sql = format!(
+                "SELECT {} FROM {}",
+                projections.join(", "),
+                quote_ident(table)
+            );
+            if let Some(cond) = filter {
+                let where_sql = ctx.render_condition(cond)?;
+                sql.push_str(" WHERE ");
+                sql.push_str(&where_sql);
+            }
+            if !group_by.is_empty() {
+                sql.push_str(" GROUP BY ");
+                sql.push_str(
+                    &group_by
+                        .iter()
+                        .map(|c| quote_ident(c))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
+            if let Some(cond) = having {
+                let having_sql = ctx.render_condition(cond)?;
+                sql.push_str(" HAVING ");
+                sql.push_str(&having_sql);
+            }
+            if !order_by.is_empty() {
+                sql.push_str(" ORDER BY ");
+                sql.push_str(
+                    &order_by
+                        .iter()
+                        .map(|(c, desc)| {
+                            if *desc {
+                                format!("{} DESC", quote_ident(c))
+                            } else {
+                                quote_ident(c)
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
+            if let Some(l) = limit {
+                sql.push_str(&format!(" LIMIT {}", l));
             }
             Ok(Rendered {
                 sql,

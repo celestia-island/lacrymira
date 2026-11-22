@@ -295,3 +295,116 @@ fn update_active_composite_where_shape() {
     assert_eq!(sets.len(), 1, "only body is a SET column");
     assert_eq!(sets[0].0, "body");
 }
+
+// ── Batch B: aggregate / distinct / pagination / typed order ──
+
+mod agg_user {
+    use lacrymira::DeriveEntity;
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "agg_users")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: i64,
+        pub org: String,
+        pub amount: i64,
+    }
+    pub use agg_users_entity::Column;
+}
+
+#[test]
+fn aggregate_renders_sum_group_having() {
+    let cmd = lacrymira::Command::Aggregate {
+        table: "agg_users".into(),
+        select_expr: vec![
+            (lacrymira::AggExpr::Col("org".into()), Some("org".into())),
+            (
+                lacrymira::AggExpr::Sum("amount".into()),
+                Some("total".into()),
+            ),
+            (lacrymira::AggExpr::Count, Some("n".into())),
+        ],
+        group_by: vec!["org".into()],
+        having: Some(lacrymira::ColumnRef::new("total").gt(100)),
+        filter: Some(lacrymira::ColumnRef::new("amount").gte(0)),
+        order_by: vec![("total".into(), true)],
+        limit: Some(5),
+    };
+    let r = lacrymira_pg::render(&cmd).unwrap();
+    assert!(
+        r.sql.contains(
+            r#"SELECT "org" AS "org", SUM("amount") AS "total", COUNT(*) AS "n" FROM "agg_users""#
+        ),
+        "{}",
+        r.sql
+    );
+    assert!(r.sql.contains(r#"WHERE "amount" >= $1"#), "{}", r.sql);
+    assert!(r.sql.contains(r#"GROUP BY "org""#), "{}", r.sql);
+    assert!(r.sql.contains(r#"HAVING "total" > $2"#), "{}", r.sql);
+    assert!(r.sql.contains(r#"ORDER BY "total" DESC"#), "{}", r.sql);
+    assert!(r.sql.contains("LIMIT 5"), "{}", r.sql);
+}
+
+#[test]
+fn aggregate_all_funcs_render() {
+    for (expr, want) in [
+        (lacrymira::AggExpr::Count, "COUNT(*)"),
+        (lacrymira::AggExpr::CountCol("x".into()), r#"COUNT("x")"#),
+        (lacrymira::AggExpr::Sum("x".into()), r#"SUM("x")"#),
+        (lacrymira::AggExpr::Min("x".into()), r#"MIN("x")"#),
+        (lacrymira::AggExpr::Max("x".into()), r#"MAX("x")"#),
+        (lacrymira::AggExpr::Avg("x".into()), r#"AVG("x")"#),
+    ] {
+        let cmd = lacrymira::Command::Aggregate {
+            table: "t".into(),
+            select_expr: vec![(expr, None)],
+            group_by: vec![],
+            having: None,
+            filter: None,
+            order_by: vec![],
+            limit: None,
+        };
+        let r = lacrymira_pg::render(&cmd).unwrap();
+        assert!(r.sql.contains(want), "{} not in {}", want, r.sql);
+    }
+}
+
+#[test]
+fn distinct_renders() {
+    use lacrymira::Select;
+    let cmd = Select::<agg_user::Model>::new().distinct().to_command();
+    let r = lacrymira_pg::render(&cmd).unwrap();
+    assert!(r.sql.starts_with("SELECT DISTINCT *"), "{}", r.sql);
+}
+
+#[test]
+fn typed_order_by_renders() {
+    use lacrymira::Select;
+    let cmd = Select::<agg_user::Model>::new()
+        .order_by_typed(agg_user::Column::Org)
+        .order_by_typed_desc(agg_user::Column::Amount)
+        .to_command();
+    let r = lacrymira_pg::render(&cmd).unwrap();
+    assert!(
+        r.sql.contains(r#"ORDER BY "org" ASC, "amount" DESC"#),
+        "{}",
+        r.sql
+    );
+}
+
+#[test]
+fn to_aggregate_carries_filter_and_order() {
+    use lacrymira::{Select, TypedColumnOps as _};
+    let base = Select::<agg_user::Model>::new()
+        .filter(agg_user::Column::Org.eq("acme"))
+        .order_by_typed_desc(agg_user::Column::Amount)
+        .limit(3);
+    let cmd = base.to_aggregate(
+        vec![(lacrymira::AggExpr::Sum("amount".into()), None)],
+        vec![],
+        None,
+    );
+    let r = lacrymira_pg::render(&cmd).unwrap();
+    assert!(r.sql.contains(r#"WHERE "org" = $1"#), "{}", r.sql);
+    assert!(r.sql.contains(r#"ORDER BY "amount" DESC"#), "{}", r.sql);
+    assert!(r.sql.contains("LIMIT 3"), "{}", r.sql);
+}

@@ -266,6 +266,13 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
                 ];
             }
 
+            impl lacrymira::TypedColumnName for Column {
+                type Entity = super::#struct_name;
+                fn col_name(&self) -> &'static str {
+                    self.name()
+                }
+            }
+
             impl lacrymira::TypedColumnOps for Column {
                 type Entity = super::#struct_name;
                 fn column_name(&self) -> &'static str {
