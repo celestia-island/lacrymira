@@ -59,7 +59,7 @@
 use futures_util::TryStreamExt;
 use lacrymira::{Command, Error, Reply, Value};
 use sqlx::postgres::{PgArguments, PgPool, PgPoolOptions, PgRow};
-use sqlx::{Column, Either, Postgres, Row};
+use sqlx::{Column, Either, Postgres, Row, TypeInfo as _};
 
 use crate::render::render;
 
@@ -69,6 +69,9 @@ use crate::render::render;
 /// <https://www.postgresql.org/docs/current/catalog-pg-type.html>.
 #[rustfmt::skip]
 mod oid {
+    /// PG `NUMERIC`.
+    #[cfg(feature = "decimal")]
+    pub const NUMERIC: u32 = 1700;
     // scalars
     pub const BOOL: u32 = 16;
     pub const BYTEA: u32 = 17;
@@ -285,6 +288,18 @@ fn bind_value<'q>(
             query.bind(parsed)
         }
         Value::Array(items) => bind_array(query, items)?,
+        #[cfg(feature = "decimal")]
+        Value::Decimal(s) => {
+            use std::str::FromStr as _;
+            let d = rust_decimal::Decimal::from_str(s)
+                .map_err(|e| Error::Decode(format!("invalid decimal parameter {s:?}: {e}")))?;
+            query.bind(d)
+        }
+        #[cfg(feature = "pgvector")]
+        Value::Vector(s) => {
+            let floats = parse_vector_param(s)?;
+            query.bind(pgvector::Vector::from(floats))
+        }
     })
 }
 
@@ -493,6 +508,27 @@ fn decode_cell(row: &PgRow, idx: usize) -> Result<Value, Error> {
             serde_json::Value,
             |v: serde_json::Value| Ok(Value::Json(v.to_string()))
         ),
+        #[cfg(feature = "decimal")]
+        Some(oid::NUMERIC) => cell!(rust_decimal::Decimal, |v: rust_decimal::Decimal| {
+            Ok(Value::Decimal(v.to_string()))
+        }),
+        // The vector type's OID is extension-assigned and DIFFERS per
+        // database (observed 10377 on managed instances, 16385 on fresh
+        // local clusters) — match by type NAME, not by a hardcoded OID.
+        #[cfg(feature = "pgvector")]
+        Some(_) if type_info.name().eq_ignore_ascii_case("vector") => {
+            cell!(pgvector::Vector, |v: pgvector::Vector| {
+                let floats = v.to_vec();
+                Ok(Value::Vector(format!(
+                    "[{}]",
+                    floats
+                        .iter()
+                        .map(|f| f.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )))
+            })
+        }
         _ => Err(bad_type()),
     }
 }
@@ -1296,4 +1332,25 @@ impl PgExecutor {
             tx: Some(self.pool.begin().await.map_err(map_db_error)?),
         })
     }
+}
+
+/// Parse the wire text form  into floats for a pgvector bind.
+#[cfg(feature = "pgvector")]
+pub(crate) fn parse_vector_param(s: &str) -> Result<Vec<f32>, Error> {
+    let inner = s
+        .trim()
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .ok_or_else(|| Error::Decode(format!("invalid vector parameter {s:?}")))?;
+    if inner.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    inner
+        .split(',')
+        .map(|p| {
+            p.trim()
+                .parse::<f32>()
+                .map_err(|e| Error::Decode(format!("invalid vector element {p:?}: {e}")))
+        })
+        .collect()
 }

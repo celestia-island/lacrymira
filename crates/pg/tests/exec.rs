@@ -702,3 +702,107 @@ async fn transaction_commit_persists_writes() {
         assert_eq!(rows[0][0], lacrymira::Value::I64(1), "commit must persist");
     }
 }
+
+// ── Decimal / pgvector against a real database (feature-gated) ──
+
+#[cfg(feature = "decimal")]
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn decimal_numeric_column_round_trips() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _dec_probe",
+        "CREATE TABLE _dec_probe (id INT, amount NUMERIC(12,4))",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    let insert = lacrymira::Command::Insert {
+        table: "_dec_probe".into(),
+        columns: vec!["id".into(), "amount".into()],
+        rows: vec![vec![
+            lacrymira::Value::I32(1),
+            lacrymira::Value::Decimal("123.4567".into()),
+        ]],
+        on_conflict: None,
+    };
+    executor.execute(&insert).await.expect("insert");
+    let select = lacrymira::Command::Select {
+        table: "_dec_probe".into(),
+        filter: Some(lacrymira::ColumnRef::new("id").eq(1)),
+        order_by: vec![],
+        limit: None,
+        offset: None,
+        lock: None,
+    };
+    match executor.execute(&select).await.expect("select") {
+        lacrymira::Reply::Rows { rows, .. } => {
+            assert!(
+                matches!(rows[0][1], lacrymira::Value::Decimal(_)),
+                "{rows:?}"
+            );
+            let d: rust_decimal::Decimal = rows[0][1].clone().try_into().unwrap();
+            assert_eq!(d, rust_decimal::Decimal::new(1234567, 4));
+        }
+        _ => panic!("expected rows"),
+    }
+}
+
+#[cfg(feature = "pgvector")]
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a pgvector-enabled PostgreSQL"]
+async fn vector_column_round_trips() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _vec_probe",
+        "CREATE TABLE _vec_probe (id INT, embedding vector(3))",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    let insert = lacrymira::Command::Insert {
+        table: "_vec_probe".into(),
+        columns: vec!["id".into(), "embedding".into()],
+        rows: vec![vec![
+            lacrymira::Value::I32(1),
+            lacrymira::Value::Vector("[0.1,0.2,0.3]".into()),
+        ]],
+        on_conflict: None,
+    };
+    executor.execute(&insert).await.expect("insert");
+    let select = lacrymira::Command::Select {
+        table: "_vec_probe".into(),
+        filter: Some(lacrymira::ColumnRef::new("id").eq(1)),
+        order_by: vec![],
+        limit: None,
+        offset: None,
+        lock: None,
+    };
+    match executor.execute(&select).await.expect("select") {
+        lacrymira::Reply::Rows { rows, .. } => {
+            let back: Option<Vec<f32>> = rows[0][1].clone().try_into().unwrap();
+            let back = back.expect("vector");
+            assert_eq!(back.len(), 3);
+            assert!((back[0] - 0.1).abs() < 1e-5, "{back:?}");
+        }
+        _ => panic!("expected rows"),
+    }
+}

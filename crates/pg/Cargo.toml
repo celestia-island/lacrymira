@@ -10,8 +10,9 @@ license-file.workspace = true
 
 [dependencies]
 lacrymira = { workspace = true }
-sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json"] }
+sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json", "rust_decimal"] }
 pgvector = { workspace = true, optional = true, features = ["sqlx"] }
+rust_decimal = { version = "^1", optional = true }
 jiff-sqlx = { workspace = true, optional = true, features = ["postgres"] }
 jiff = { workspace = true }
 uuid = { workspace = true }
@@ -24,7 +25,8 @@ thiserror = { workspace = true }
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:tokio", "dep:jiff-sqlx", "dep:serde_json", "dep:futures-util"]
-pgvector = ["postgres", "dep:pgvector"]
+decimal = ["postgres", "dep:rust_decimal", "lacrymira/decimal"]  # sqlx rust_decimal impl does the sqlx traits
+pgvector = ["postgres", "dep:pgvector", "lacrymira/pgvector"]
 
 [lints]
 workspace = true
