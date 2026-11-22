@@ -340,3 +340,40 @@ mod chrono_opt_encode {
         assert!(matches!(Value::from(&none), Value::Null));
     }
 }
+
+#[cfg(feature = "chrono")]
+mod chrono_naive {
+    use lacrymira::Value;
+
+    #[test]
+    fn naive_date_round_trip() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 11, 22).unwrap();
+        let v = Value::from(&d);
+        assert!(matches!(v, Value::Text(_)));
+        let back: chrono::NaiveDate = v.try_into().unwrap();
+        assert_eq!(back, d);
+    }
+
+    #[test]
+    fn naive_datetime_round_trip_both_forms() {
+        let dt = chrono::NaiveDate::from_ymd_opt(2026, 1, 2)
+            .unwrap()
+            .and_hms_micro_opt(3, 4, 5, 123456)
+            .unwrap();
+        let v = Value::from(&dt);
+        let back: chrono::NaiveDateTime = v.try_into().unwrap();
+        assert_eq!(back, dt);
+        // bare form parses too
+        let bare = Value::Text("2026-01-02 03:04:05.123456".into());
+        let back2: chrono::NaiveDateTime = bare.try_into().unwrap();
+        assert_eq!(back2, dt);
+    }
+
+    #[test]
+    fn fixed_offset_round_trip() {
+        let dt = chrono::DateTime::parse_from_rfc3339("2026-11-22T08:00:00+08:00").unwrap();
+        let v = Value::from(&dt);
+        let back: chrono::DateTime<chrono::FixedOffset> = v.try_into().unwrap();
+        assert_eq!(back, dt);
+    }
+}

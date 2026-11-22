@@ -242,3 +242,56 @@ fn map_db_error_is_public() {
     let err = use_it(sqlx::Error::RowNotFound);
     assert!(matches!(err, lacrymira::Error::Db { .. }));
 }
+
+mod site_doc {
+    use lacrymira::DeriveEntity;
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "site_documents")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub kind: String,
+        #[lacrymira(primary_key)]
+        pub doc_key: String,
+        pub body: String,
+    }
+    pub use site_documents_entity::ActiveModel;
+}
+
+#[test]
+fn find_by_pk_parts_renders_composite_where() {
+    use lacrymira::{ColumnRef, Select};
+    // Mirrors find_by_pk_parts' construction: one eq per PK column, AND-joined.
+    let select = Select::<site_doc::Model>::new()
+        .filter(ColumnRef::new("kind").eq("page"))
+        .filter(ColumnRef::new("doc_key").eq("home"));
+    let rendered = lacrymira_pg::render(&select.to_command()).unwrap();
+    assert!(rendered.sql.contains(r#""kind" = $1"#), "{}", rendered.sql);
+    assert!(rendered.sql.contains("AND"), "{}", rendered.sql);
+    assert!(
+        rendered.sql.contains(r#""doc_key" = $2"#),
+        "{}",
+        rendered.sql
+    );
+}
+
+#[test]
+fn update_active_composite_where_shape() {
+    use lacrymira::Field;
+    let am = site_doc::ActiveModel {
+        kind: Field::Value("page".into()),
+        doc_key: Field::Value("home".into()),
+        body: Field::Value("new body".into()),
+    };
+    let pairs = <site_doc::Model as lacrymira::Entity>::active_pairs(&am);
+    let pk_cols = <site_doc::Model as lacrymira::Entity>::PK_INDICES
+        .iter()
+        .map(|&i| <site_doc::Model as lacrymira::Entity>::COLUMNS[i])
+        .collect::<Vec<_>>();
+    // Non-PK sets exclude both PK columns
+    let sets: Vec<_> = pairs
+        .into_iter()
+        .filter(|(c, _)| !pk_cols.contains(&c.as_str()))
+        .collect();
+    assert_eq!(sets.len(), 1, "only body is a SET column");
+    assert_eq!(sets[0].0, "body");
+}

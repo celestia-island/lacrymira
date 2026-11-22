@@ -188,3 +188,60 @@ fn column_is_copy() {
     let _ = c; // still usable — Copy
     assert_eq!(c2.name(), "before");
 }
+
+mod site_doc {
+    // Composite-PK shape from shittim-chest's site_documents (kind, doc_key).
+    use lacrymira::DeriveEntity;
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "site_documents")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub kind: String,
+        #[lacrymira(primary_key)]
+        pub doc_key: String,
+        pub body: String,
+    }
+}
+
+#[test]
+fn composite_pk_metadata() {
+    use lacrymira::Entity;
+    assert_eq!(<site_doc::Model as Entity>::PK_INDICES, &[0, 1]);
+}
+
+mod raw_ident {
+    use lacrymira::DeriveEntity;
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "raw_refs")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: i64,
+        pub r#ref: String,
+        pub r#type: String,
+    }
+    pub use raw_refs_entity::{ActiveModel, Column};
+}
+
+#[test]
+fn raw_identifier_fields_map_to_clean_column_names() {
+    let _ = &raw_ident::Model {
+        id: 0,
+        r#ref: String::new(),
+        r#type: String::new(),
+    };
+    assert_eq!(
+        <raw_ident::Model as lacrymira::Entity>::COLUMNS,
+        &["id", "ref", "type"]
+    );
+    assert_eq!(raw_ident::Column::Ref.name(), "ref");
+    assert_eq!(raw_ident::Column::Type.name(), "type");
+    // round-trip through the active pairs keeps the raw field working
+    use lacrymira::Field;
+    let am = raw_ident::ActiveModel {
+        id: Field::Value(1),
+        r#ref: Field::Value("r".into()),
+        r#type: Field::Value("t".into()),
+    };
+    let pairs = <raw_ident::Model as lacrymira::Entity>::active_pairs(&am);
+    assert_eq!(pairs.len(), 3);
+}
