@@ -377,3 +377,73 @@ mod chrono_naive {
         assert_eq!(back, dt);
     }
 }
+
+// ── Decimal / Vector round-trips (feature-gated) ──
+
+#[cfg(feature = "decimal")]
+mod decimal_tests {
+    use lacrymira::Value;
+
+    #[test]
+    fn decimal_round_trip() {
+        use std::str::FromStr as _;
+        let d = rust_decimal::Decimal::from_str("123.4567").unwrap();
+        let v = Value::from(&d);
+        assert!(matches!(v, Value::Decimal(_)));
+        let back: rust_decimal::Decimal = v.try_into().unwrap();
+        assert_eq!(back, d);
+    }
+
+    #[test]
+    fn decimal_option_round_trip() {
+        let some = Some(rust_decimal::Decimal::new(99, 2));
+        let v = Value::from(&some);
+        let back: Option<rust_decimal::Decimal> = v.try_into().unwrap();
+        assert_eq!(back, some);
+        let none: Option<rust_decimal::Decimal> = None;
+        assert!(matches!(Value::from(&none), Value::Null));
+        let back: Option<rust_decimal::Decimal> = Value::Null.try_into().unwrap();
+        assert!(back.is_none());
+    }
+
+    #[test]
+    fn decimal_from_text_accepts_numeric_strings() {
+        let v = Value::Text("42.5".into());
+        let back: rust_decimal::Decimal = v.try_into().unwrap();
+        assert_eq!(back, rust_decimal::Decimal::new(425, 1));
+    }
+}
+
+#[cfg(feature = "pgvector")]
+mod vector_tests {
+    use lacrymira::Value;
+
+    #[test]
+    fn vector_option_round_trip() {
+        let vec = vec![0.1f32, 0.2, 0.3];
+        let v = Value::from(&Some(vec.clone()));
+        assert!(matches!(v, Value::Vector(_)));
+        let back: Option<Vec<f32>> = v.try_into().unwrap();
+        let back = back.unwrap();
+        assert_eq!(back.len(), 3);
+        assert!((back[0] - 0.1).abs() < 1e-6);
+        let none: Option<Vec<f32>> = None;
+        assert!(matches!(Value::from(&none), Value::Null));
+    }
+
+    #[test]
+    fn vector_text_form_parses() {
+        let v = Value::Text("[1.0,2.0,3.0]".into());
+        let back: Option<Vec<f32>> = v.try_into().unwrap();
+        assert_eq!(back.unwrap(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn vector_empty_and_null() {
+        let v = Value::Vector("[]".into());
+        let back: Option<Vec<f32>> = v.try_into().unwrap();
+        assert!(back.unwrap().is_empty());
+        let back: Option<Vec<f32>> = Value::Null.try_into().unwrap();
+        assert!(back.is_none());
+    }
+}

@@ -31,6 +31,17 @@ pub enum Value {
     Json(String),
     /// Array of values (for `Vec<T>` columns).
     Array(Vec<Value>),
+    /// Exact decimal (PG `NUMERIC`), canonical string form.
+    ///
+    /// Behind the `decimal` feature; the wire form is the decimal's string
+    /// serialization so the msgpack contract stays feature-independent.
+    #[cfg(feature = "decimal")]
+    Decimal(String),
+    /// pgvector embedding (PG `vector` column).
+    ///
+    /// Behind the `pgvector` feature; stored as its text form `[1,2,3]`.
+    #[cfg(feature = "pgvector")]
+    Vector(String),
 }
 
 // ── TryFrom<Value> for common types (used by from_values) ──
@@ -428,4 +439,95 @@ impl TryFrom<Value> for chrono::DateTime<chrono::FixedOffset> {
             _ => Err(()),
         }
     }
+}
+
+// ── Decimal round-trips (feature "decimal") ──
+
+#[cfg(feature = "decimal")]
+impl From<&rust_decimal::Decimal> for Value {
+    fn from(v: &rust_decimal::Decimal) -> Self {
+        Value::Decimal(v.to_string())
+    }
+}
+
+#[cfg(feature = "decimal")]
+impl TryFrom<Value> for rust_decimal::Decimal {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        use std::str::FromStr as _;
+        match v {
+            Value::Decimal(s) | Value::Text(s) => {
+                rust_decimal::Decimal::from_str(&s).map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "decimal")]
+impl TryFrom<Value> for Option<rust_decimal::Decimal> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        use std::str::FromStr as _;
+        match v {
+            Value::Decimal(s) | Value::Text(s) => rust_decimal::Decimal::from_str(&s)
+                .map(Some)
+                .map_err(|_| ()),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "decimal")]
+impl From<&Option<rust_decimal::Decimal>> for Value {
+    fn from(v: &Option<rust_decimal::Decimal>) -> Self {
+        match v {
+            Some(d) => Value::Decimal(d.to_string()),
+            None => Value::Null,
+        }
+    }
+}
+
+// ── pgvector round-trips (feature "pgvector") ──
+
+#[cfg(feature = "pgvector")]
+impl TryFrom<Value> for Option<Vec<f32>> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Vector(s) | Value::Text(s) => parse_vector_text(&s).map(Some).ok_or(()),
+            Value::Null => Ok(None),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "pgvector")]
+impl From<&Option<Vec<f32>>> for Value {
+    fn from(v: &Option<Vec<f32>>) -> Self {
+        match v {
+            Some(vec) => Value::Vector(format!(
+                "[{}]",
+                vec.iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )),
+            None => Value::Null,
+        }
+    }
+}
+
+/// Parse pgvector's text form `[1,2,3]`.
+#[cfg(feature = "pgvector")]
+fn parse_vector_text(s: &str) -> Option<Vec<f32>> {
+    let inner = s.trim().strip_prefix('[')?.strip_suffix(']')?;
+    if inner.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    inner
+        .split(',')
+        .map(|p| p.trim().parse::<f32>().ok())
+        .collect()
 }
