@@ -505,6 +505,14 @@ fn parse_uuid(s: &str) -> Result<uuid::Uuid, Error> {
 /// Parse a [`Value::Timestamp`] RFC 3339 string into a `jiff::Timestamp`
 /// wrapped for sqlx encoding (`jiff-sqlx` implements the sqlx traits on the
 /// wrapper, not on `jiff::Timestamp` itself).
+///
+/// # Binding into naive `timestamp` columns (G-chest-12)
+///
+/// The bind arrives typed as `timestamptz`. Casting it straight to the
+/// binary protocol of a naive column (`$1::timestamp`) fails with SQLSTATE
+/// `22P03`. In hand-written `Command::Sql` text, mediate through text:
+/// `$1::text::timestamp`. The typed helpers (`insert`/`insert_active`/…)
+/// bind through the OID dispatcher and are unaffected.
 fn parse_timestamp(s: &str) -> Result<jiff_sqlx::Timestamp, Error> {
     s.parse::<jiff::Timestamp>()
         .map(Into::into)
@@ -932,33 +940,38 @@ impl PgExecutor {
 
     /// Update only the set fields of an ActiveModel by primary key.
     ///
-    /// Requires a single-column PK. The PK column must be `Field::Value`
-    /// in the ActiveModel (you cannot UPDATE a row without addressing it);
-    /// it is excluded from the SET clause.
+    /// PK columns (single or composite) must be `Field::Value` in the
+    /// ActiveModel — you cannot UPDATE a row without addressing it; they
+    /// are excluded from the SET clause and joined with AND in the WHERE.
     pub async fn update_active<E>(&self, active: &E::ActiveModel) -> Result<E::Model, Error>
     where
         E: lacrymira::Entity,
     {
-        if E::PK_INDICES.len() != 1 {
-            return Err(Error::Config(
-                "update_active supports single-column PKs".into(),
-            ));
+        let pk_cols: Vec<&str> = E::PK_INDICES.iter().map(|&i| E::COLUMNS[i]).collect();
+        if pk_cols.is_empty() {
+            return Err(Error::Config("update_active requires a primary key".into()));
         }
-        let pk_col = E::COLUMNS[E::PK_INDICES[0]];
 
         let pairs = E::active_pairs(active);
-        let pk_value = pairs
-            .iter()
-            .find(|(c, _)| c == pk_col)
-            .map(|(_, v)| v.clone())
-            .ok_or_else(|| {
-                Error::Config(format!(
-                    "update_active: primary key `{}` must be set (Field::Value)",
-                    pk_col
-                ))
-            })?;
+        let mut pk_values: Vec<lacrymira::Value> = Vec::with_capacity(pk_cols.len());
+        for pk_col in &pk_cols {
+            let v = pairs
+                .iter()
+                .find(|(c, _)| c == pk_col)
+                .map(|(_, v)| v.clone())
+                .ok_or_else(|| {
+                    Error::Config(format!(
+                        "update_active: primary key `{}` must be set (Field::Value)",
+                        pk_col
+                    ))
+                })?;
+            pk_values.push(v);
+        }
 
-        let sets: Vec<_> = pairs.into_iter().filter(|(c, _)| c != pk_col).collect();
+        let sets: Vec<_> = pairs
+            .into_iter()
+            .filter(|(c, _)| !pk_cols.contains(&c.as_str()))
+            .collect();
         if sets.is_empty() {
             return Err(Error::Config("update_active: no non-PK fields set".into()));
         }
@@ -969,8 +982,12 @@ impl PgExecutor {
             params.push(v.clone());
             set_parts.push(format!("\"{}\" = ${}", col, params.len()));
         }
-        params.push(pk_value);
-        let where_sql = format!("\"{}\" = ${}", pk_col, params.len());
+        let mut where_parts: Vec<String> = Vec::new();
+        for (pk_col, pk_value) in pk_cols.iter().zip(pk_values) {
+            params.push(pk_value);
+            where_parts.push(format!("\"{}\" = ${}", pk_col, params.len()));
+        }
+        let where_sql = where_parts.join(" AND ");
 
         let sql = format!(
             "UPDATE \"{}\" SET {} WHERE {} RETURNING *",

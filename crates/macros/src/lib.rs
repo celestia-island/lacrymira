@@ -92,7 +92,14 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 
     for (idx, field) in fields.iter().enumerate() {
         let ident = field.ident.as_ref().expect("named field");
-        let field_name = ident.to_string();
+        // Raw identifiers (r#ref, r#type) keep their r# prefix in
+        // Ident::to_string; strip it for the column name while the ident
+        // token itself stays raw where it is emitted (G-chest-3).
+        let field_name = ident
+            .to_string()
+            .strip_prefix("r#")
+            .map(str::to_owned)
+            .unwrap_or_else(|| ident.to_string());
 
         let mut col_name = field_name.clone();
         let mut is_pk = false;

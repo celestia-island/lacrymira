@@ -438,3 +438,44 @@ impl From<&Option<jiff::Timestamp>> for Value {
         }
     }
 }
+
+#[cfg(feature = "chrono")]
+impl From<&chrono::NaiveDate> for Value {
+    fn from(v: &chrono::NaiveDate) -> Self {
+        Value::Text(v.format("%Y-%m-%d").to_string())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<&chrono::NaiveDateTime> for Value {
+    fn from(v: &chrono::NaiveDateTime) -> Self {
+        Value::Timestamp(v.and_utc().to_rfc3339())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<&chrono::DateTime<chrono::FixedOffset>> for Value {
+    fn from(v: &chrono::DateTime<chrono::FixedOffset>) -> Self {
+        Value::Timestamp(v.to_rfc3339())
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<&Option<chrono::NaiveDate>> for Value {
+    fn from(v: &Option<chrono::NaiveDate>) -> Self {
+        match v {
+            Some(d) => Value::Text(d.format("%Y-%m-%d").to_string()),
+            None => Value::Null,
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl From<&Option<chrono::NaiveDateTime>> for Value {
+    fn from(v: &Option<chrono::NaiveDateTime>) -> Self {
+        match v {
+            Some(dt) => Value::Timestamp(dt.and_utc().to_rfc3339()),
+            None => Value::Null,
+        }
+    }
+}

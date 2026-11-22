@@ -386,3 +386,46 @@ impl TryFrom<Value> for Option<chrono::DateTime<chrono::Utc>> {
         }
     }
 }
+
+#[cfg(feature = "chrono")]
+impl TryFrom<Value> for chrono::NaiveDate {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Text(s) | Value::Timestamp(s) => {
+                chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl TryFrom<Value> for chrono::NaiveDateTime {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Text(s) | Value::Timestamp(s) => {
+                // Accept both bare naive forms and full RFC3339 (zone dropped).
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .map(|dt| dt.naive_utc())
+                    .or_else(|_| chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f"))
+                    .map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl TryFrom<Value> for chrono::DateTime<chrono::FixedOffset> {
+    type Error = ();
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Text(s) | Value::Timestamp(s) => {
+                chrono::DateTime::parse_from_rfc3339(&s).map_err(|_| ())
+            }
+            _ => Err(()),
+        }
+    }
+}
