@@ -27,10 +27,13 @@ pub struct Migration {
     pub description: String,
     /// The SQL to execute (multiple statements separated by `;`).
     pub sql: String,
+    /// The roll-back SQL. Executed by [`MigrationRunner::down`]; empty
+    /// means "no down lane" and `down` skips it.
+    pub down_sql: String,
 }
 
 impl Migration {
-    /// Create a new migration from version, description, and SQL.
+    /// Create a new migration from version, description, and SQL (no down).
     pub fn new(
         version: impl Into<String>,
         description: impl Into<String>,
@@ -40,7 +43,14 @@ impl Migration {
             version: version.into(),
             description: description.into(),
             sql: sql.into(),
+            down_sql: String::new(),
         }
+    }
+
+    /// Attach a roll-back SQL to this migration.
+    pub fn with_down(mut self, down_sql: impl Into<String>) -> Self {
+        self.down_sql = down_sql.into();
+        self
     }
 }
 
@@ -83,12 +93,62 @@ impl MigrationRunner {
         MigrationRunner::new(vec![Migration::new(version, "baseline schema", sql)])
     }
 
+    /// Roll back the most recent `steps` applied migrations.
+    ///
+    /// Walks the registered set in REVERSE declaration order; for each
+    /// recorded version whose `down_sql` is non-empty, executes it in a
+    /// transaction and deletes the bookkeeping row. Recorded versions
+    /// without a down lane (empty `down_sql`) are skipped without error —
+    /// the caller sees them in the result's `skipped` list.
+    pub async fn down(&self, pool: &sqlx::PgPool, steps: u32) -> Result<MigrationResult, Error> {
+        let recorded: Vec<(String,)> = sqlx::query_as("SELECT version FROM seaql_migrations")
+            .fetch_all(pool)
+            .await
+            .map_err(map_sqlx)?;
+        let recorded_set: std::collections::HashSet<String> =
+            recorded.into_iter().map(|(v,)| v).collect();
+
+        let mut rolled_back = Vec::new();
+        let mut skipped = Vec::new();
+
+        for migration in self.migrations.iter().rev() {
+            if rolled_back.len() as u32 >= steps {
+                break;
+            }
+            if !recorded_set.contains(&migration.version) {
+                continue;
+            }
+            if migration.down_sql.is_empty() {
+                skipped.push(migration.version.clone());
+                continue;
+            }
+            let mut tx = pool.begin().await.map_err(map_sqlx)?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(migration.down_sql.as_str()))
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx)?;
+            sqlx::query("DELETE FROM seaql_migrations WHERE version = $1")
+                .bind(&migration.version)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx)?;
+            tx.commit().await.map_err(map_sqlx)?;
+            rolled_back.push(migration.version.clone());
+        }
+
+        Ok(MigrationResult {
+            applied: rolled_back,
+            skipped,
+            pre_history: Vec::new(),
+        })
+    }
+
     /// Run all pending migrations against the given pool.
     pub async fn up(&self, pool: &sqlx::PgPool) -> Result<MigrationResult, Error> {
         // 1. Ensure the bookkeeping table exists (same shape as sea-orm)
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS seaql_migrations (
-                version TEXT PRIMARY KEY,
+                version VARCHAR(255) PRIMARY KEY,
                 applied_at BIGINT NOT NULL
             )",
         )
@@ -136,7 +196,9 @@ impl MigrationRunner {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_millis() as i64;
+                // sea-orm records applied_at in SECONDS — keep the unit
+                // identical so a mixed-era table stays comparable.
+                .as_secs() as i64;
             sqlx::query("INSERT INTO seaql_migrations (version, applied_at) VALUES ($1, $2)")
                 .bind(&migration.version)
                 .bind(now)
