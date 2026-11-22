@@ -218,3 +218,27 @@ fn upsert_command_renders_do_update() {
     assert!(rendered.sql.contains("ON CONFLICT"), "{}", rendered.sql);
     assert!(rendered.sql.contains("DO UPDATE"), "{}", rendered.sql);
 }
+
+// ── Transactional guard (G6 / G-arona-1 / G-arona-13) ──
+
+#[test]
+fn transaction_guard_is_a_public_type() {
+    // Compile-time proof the guard exists with the expected shape; the
+    // behaviour (commit/rollback/typed writes inside) is DB-backed.
+    fn accepts(_: fn(&lacrymira_pg::PgExecutor) -> ()) {}
+    let _ = accepts;
+    // PgTransaction is exported and constructible only through begin().
+    fn _shape(tx: lacrymira_pg::PgTransaction) -> lacrymira_pg::PgTransaction {
+        tx
+    }
+}
+
+#[test]
+fn map_db_error_is_public() {
+    // G-arona-12: consumers classify driver errors without a drifting copy.
+    fn use_it(e: sqlx::Error) -> lacrymira::Error {
+        lacrymira_pg::map_db_error(e)
+    }
+    let err = use_it(sqlx::Error::RowNotFound);
+    assert!(matches!(err, lacrymira::Error::Db { .. }));
+}

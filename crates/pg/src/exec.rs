@@ -518,7 +518,11 @@ fn parse_json(s: &str) -> Result<serde_json::Value, Error> {
 
 /// Map a sqlx error to [`Error::Db`], preserving the SQLSTATE and deriving a
 /// stable `kind` classification for retry logic (see `lacrymira::Error`).
-fn map_db_error(e: sqlx::Error) -> Error {
+/// Map a sqlx error onto [`Error`], preserving SQLSTATE when present.
+///
+/// Public so consumers can classify driver errors without re-implementing
+/// the mapping (G-arona-12: arona carried a drifting copy).
+pub fn map_db_error(e: sqlx::Error) -> Error {
     let sqlstate = match &e {
         sqlx::Error::Database(db) => db.code().map(|c| c.to_string()),
         _ => None,
@@ -1021,5 +1025,258 @@ impl PgExecutor {
         rows.first()
             .ok_or_else(|| Error::Decode("upsert returned no row".into()))
             .and_then(|r| row_to_model::<E>(r))
+    }
+}
+
+// ── Transactional guard (closes the family's G6 / G-arona-1 / G-arona-13) ──
+
+/// A transaction-scoped executor.
+///
+/// Obtain with [`PgExecutor::begin`], run typed helpers or raw Commands on it,
+/// then [`commit`](Self::commit) or [`rollback`](Self::rollback). Dropping
+/// without either rolls back (sqlx semantics).
+///
+/// This is the guard-object shape on purpose: closures that hand out a
+/// borrowed transaction force higher-ranked bounds on the future, which Rust
+/// cannot satisfy for an async fn that borrows a local. The guard owns the
+/// `Transaction<'static, Postgres>` that `Pool::begin` returns, so there is no
+/// lifetime parameter and every helper works unchanged inside it.
+///
+/// ```ignore
+/// let mut tx = executor.begin().await?;
+/// tx.insert_active::<LlmProvider>(&active).await?;
+/// tx.execute(&Command::Sql { .. }).await?;
+/// tx.commit().await?;
+/// ```
+pub struct PgTransaction {
+    tx: Option<sqlx::Transaction<'static, Postgres>>,
+}
+
+impl PgTransaction {
+    fn tx_mut(&mut self) -> Result<&mut sqlx::Transaction<'static, Postgres>, Error> {
+        self.tx
+            .as_mut()
+            .ok_or_else(|| Error::Config("transaction already finished".into()))
+    }
+
+    /// Execute a [`Command`] on this transaction's connection.
+    pub async fn execute(&mut self, cmd: &Command) -> Result<Reply, Error> {
+        let rendered = render(cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let tx = self.tx_mut()?;
+        match cmd {
+            Command::Select { .. } | Command::Insert { .. } | Command::Update { .. } => {
+                let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+                rows_to_reply(&rows)
+            }
+            Command::Count { .. } => {
+                let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+                let count: i64 = rows
+                    .first()
+                    .and_then(|r| r.try_get::<i64, _>("count").ok())
+                    .unwrap_or(0);
+                Ok(Reply::Value(Some(lacrymira::Value::I64(count))))
+            }
+            Command::Delete { .. } => {
+                let result = query.execute(&mut **tx).await.map_err(map_db_error)?;
+                Ok(Reply::Affected(result.rows_affected()))
+            }
+            Command::Sql { .. } => {
+                let mut rows: Vec<PgRow> = Vec::new();
+                let mut affected: u64 = 0;
+                let mut stream = sqlx::Executor::fetch_many(&mut **tx, query);
+                while let Some(item) = stream.try_next().await.map_err(map_db_error)? {
+                    match item {
+                        Either::Left(result) => affected += result.rows_affected(),
+                        Either::Right(row) => rows.push(row),
+                    }
+                }
+                if rows.is_empty() {
+                    Ok(Reply::Affected(affected))
+                } else {
+                    rows_to_reply(&rows)
+                }
+            }
+            Command::Kv { .. } => Err(Error::Config(
+                "KV commands are not supported by the PostgreSQL driver".into(),
+            )),
+        }
+    }
+
+    /// Fetch all rows matching a SELECT as typed models, inside the transaction.
+    pub async fn find_all<E>(
+        &mut self,
+        select: &lacrymira::Select<E>,
+    ) -> Result<Vec<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let rendered = render(&select.to_command())?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let tx = self.tx_mut()?;
+        let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+        rows.iter().map(row_to_model::<E>).collect()
+    }
+
+    /// Fetch the first matching row as a typed model, inside the transaction.
+    pub async fn find_one<E>(
+        &mut self,
+        select: &lacrymira::Select<E>,
+    ) -> Result<Option<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        Ok(self.find_all(select).await?.into_iter().next())
+    }
+
+    /// Insert a full Model inside the transaction; returns the stored row.
+    ///
+    /// Column lists come from `E::COLUMNS`, so a new entity column is picked
+    /// up automatically — the erosion hazard of hand-written in-transaction
+    /// column lists (G-arona-13) does not apply here.
+    pub async fn insert<E>(&mut self, model: &E::Model) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let cmd = Command::Insert {
+            table: E::TABLE.to_string(),
+            columns: E::COLUMNS.iter().map(|c| c.to_string()).collect(),
+            rows: vec![E::to_values(model)],
+            on_conflict: None,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let tx = self.tx_mut()?;
+        let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or_else(|| Error::Decode("INSERT returned no row".into()))
+            .and_then(|r| row_to_model::<E>(r))
+    }
+
+    /// Insert only the set fields of an ActiveModel, inside the transaction.
+    pub async fn insert_active<E>(&mut self, active: &E::ActiveModel) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        let pairs = E::active_pairs(active);
+        if pairs.is_empty() {
+            return Err(Error::Config(
+                "insert_active: no fields set in ActiveModel".into(),
+            ));
+        }
+        let cmd = Command::Insert {
+            table: E::TABLE.to_string(),
+            columns: pairs.iter().map(|(c, _)| c.clone()).collect(),
+            rows: vec![pairs.into_iter().map(|(_, v)| v).collect()],
+            on_conflict: None,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let tx = self.tx_mut()?;
+        let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or_else(|| Error::Decode("INSERT returned no row".into()))
+            .and_then(|r| row_to_model::<E>(r))
+    }
+
+    /// Update only the set non-PK fields of an ActiveModel, inside the
+    /// transaction (single-column PK, PK must be `Field::Value`).
+    pub async fn update_active<E>(&mut self, active: &E::ActiveModel) -> Result<E::Model, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        if E::PK_INDICES.len() != 1 {
+            return Err(Error::Config(
+                "update_active supports single-column PKs".into(),
+            ));
+        }
+        let pk_col = E::COLUMNS[E::PK_INDICES[0]];
+        let pairs = E::active_pairs(active);
+        let pk_value = pairs
+            .iter()
+            .find(|(c, _)| c == pk_col)
+            .map(|(_, v)| v.clone())
+            .ok_or_else(|| {
+                Error::Config(format!(
+                    "update_active: primary key `{}` must be set (Field::Value)",
+                    pk_col
+                ))
+            })?;
+        let sets: Vec<_> = pairs.into_iter().filter(|(c, _)| c != pk_col).collect();
+        if sets.is_empty() {
+            return Err(Error::Config("update_active: no non-PK fields set".into()));
+        }
+        let mut set_parts: Vec<String> = Vec::new();
+        let mut params: Vec<lacrymira::Value> = Vec::new();
+        for (col, v) in &sets {
+            params.push(v.clone());
+            set_parts.push(format!("\"{}\" = ${}", col, params.len()));
+        }
+        params.push(pk_value);
+        let where_sql = format!("\"{}\" = ${}", pk_col, params.len());
+        let sql = format!(
+            "UPDATE \"{}\" SET {} WHERE {} RETURNING *",
+            E::TABLE,
+            set_parts.join(", "),
+            where_sql
+        );
+        let cmd = Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
+            text: sql,
+            params,
+        };
+        let rendered = render(&cmd)?;
+        let query = build_query(&rendered.sql, &rendered.params)?;
+        let tx = self.tx_mut()?;
+        let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+        rows.first()
+            .ok_or(Error::NotFound)
+            .and_then(|r| row_to_model::<E>(r))
+    }
+
+    /// Count matching rows inside the transaction.
+    pub async fn count<E>(&mut self, filter: Option<lacrymira::Condition>) -> Result<i64, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        match self
+            .execute(&Command::Count {
+                table: E::TABLE.to_string(),
+                filter,
+            })
+            .await?
+        {
+            Reply::Value(Some(lacrymira::Value::I64(n))) => Ok(n),
+            _ => Ok(0),
+        }
+    }
+
+    /// Commit the transaction.
+    pub async fn commit(mut self) -> Result<(), Error> {
+        let tx = self
+            .tx
+            .take()
+            .ok_or_else(|| Error::Config("transaction already finished".into()))?;
+        tx.commit().await.map_err(map_db_error)
+    }
+
+    /// Roll the transaction back.
+    pub async fn rollback(mut self) -> Result<(), Error> {
+        let tx = self
+            .tx
+            .take()
+            .ok_or_else(|| Error::Config("transaction already finished".into()))?;
+        tx.rollback().await.map_err(map_db_error)
+    }
+}
+
+impl PgExecutor {
+    /// Begin a transaction; returns a [`PgTransaction`] guard.
+    ///
+    /// Dropping the guard without `commit`/`rollback` rolls back.
+    pub async fn begin(&self) -> Result<PgTransaction, Error> {
+        Ok(PgTransaction {
+            tx: Some(self.pool.begin().await.map_err(map_db_error)?),
+        })
     }
 }

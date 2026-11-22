@@ -607,3 +607,98 @@ async fn kv_command_rejected_without_db() {
         .expect_err("KV must be rejected by the PG driver");
     assert!(matches!(err, lacrymira::Error::Config(_)), "{err:?}");
 }
+
+// ── Transaction guard: atomicity semantics (DB-backed) ──
+
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn transaction_rollback_discards_writes() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _tx_probe",
+        "CREATE TABLE _tx_probe (id INT)",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+
+    // Write inside a transaction, then roll back — the row must not land.
+    let mut tx = executor.begin().await.expect("begin");
+    tx.execute(&lacrymira::Command::Sql {
+        dialect: lacrymira::Dialect::Postgres,
+        text: "INSERT INTO _tx_probe VALUES (1)".into(),
+        params: vec![],
+    })
+    .await
+    .expect("insert in tx");
+    tx.rollback().await.expect("rollback");
+
+    let reply = executor
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
+            text: "SELECT count(*) FROM _tx_probe".into(),
+            params: vec![],
+        })
+        .await
+        .expect("count");
+    if let lacrymira::Reply::Rows { rows, .. } = reply {
+        assert_eq!(
+            rows[0][0],
+            lacrymira::Value::I64(0),
+            "rollback must discard"
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn transaction_commit_persists_writes() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _tx_commit_probe",
+        "CREATE TABLE _tx_commit_probe (id INT)",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+
+    let mut tx = executor.begin().await.expect("begin");
+    tx.execute(&lacrymira::Command::Sql {
+        dialect: lacrymira::Dialect::Postgres,
+        text: "INSERT INTO _tx_commit_probe VALUES (7)".into(),
+        params: vec![],
+    })
+    .await
+    .expect("insert in tx");
+    tx.commit().await.expect("commit");
+
+    let reply = executor
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
+            text: "SELECT count(*) FROM _tx_commit_probe".into(),
+            params: vec![],
+        })
+        .await
+        .expect("count");
+    if let lacrymira::Reply::Rows { rows, .. } = reply {
+        assert_eq!(rows[0][0], lacrymira::Value::I64(1), "commit must persist");
+    }
+}

@@ -9,6 +9,6 @@ pub mod migrate;
 pub mod render;
 
 pub use drift::{check_drift, parse_pg_index, DbIndex, IndexDrift};
-pub use exec::PgExecutor;
+pub use exec::{map_db_error, PgExecutor, PgTransaction};
 pub use migrate::{Migration, MigrationResult, MigrationRunner};
 pub use render::{render, Rendered};
