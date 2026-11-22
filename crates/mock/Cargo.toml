@@ -1,0 +1,15 @@
+[package]
+name = "lacrymira-mock"
+description = "In-process mock executor for lacrymira — queued replies plus a statement log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license-file.workspace = true
+repository.workspace = true
+
+[dependencies]
+lacrymira = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "^1", features = ["rt", "macros"] }

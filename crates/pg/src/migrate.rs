@@ -16,10 +16,27 @@
 //! This means it can be dropped into a database that sea-orm has been
 //! migrating, and it will pick up exactly where sea-orm left off.
 
+use std::pin::Pin;
+
 use lacrymira::Error;
 
+/// A boxed async migration body: runs inside the migration transaction.
+///
+/// Receives the transaction so data migrations do their work in the same
+/// atomic scope as the bookkeeping row (a failure rolls both back).
+pub type MigrationFuture<'a> =
+    Pin<Box<dyn std::future::Future<Output = Result<(), Error>> + Send + 'a>>;
+
+/// A Rust data-migration step (the "code lane").
+///
+/// Some migrations cannot be expressed as static SQL — they read rows and
+/// write derived ones, or branch on what they find. This is the door for
+/// those: a closure that receives the open transaction.
+pub type MigrationFn =
+    std::sync::Arc<dyn for<'a> Fn(&'a mut sqlx::PgConnection) -> MigrationFuture<'a> + Send + Sync>;
+
 /// A single migration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Migration {
     /// The version string (must be unique, e.g. "20261121000001").
     pub version: String,
@@ -30,9 +47,35 @@ pub struct Migration {
     /// The roll-back SQL. Executed by [`MigrationRunner::down`]; empty
     /// means "no down lane" and `down` skips it.
     pub down_sql: String,
+    /// Optional Rust body (the code lane). Runs BEFORE `sql` inside the
+    /// same transaction.
+    pub code: Option<MigrationFn>,
+}
+
+impl std::fmt::Debug for Migration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Migration")
+            .field("version", &self.version)
+            .field("description", &self.description)
+            .field("sql_len", &self.sql.len())
+            .field("down_sql_len", &self.down_sql.len())
+            .field("has_code", &self.code.is_some())
+            .finish()
+    }
 }
 
 impl Migration {
+    /// Attach a Rust data-migration body (the code lane).
+    ///
+    /// The closure runs inside the migration's transaction, before `sql`.
+    pub fn with_code<F>(mut self, f: F) -> Self
+    where
+        F: for<'a> Fn(&'a mut sqlx::PgConnection) -> MigrationFuture<'a> + Send + Sync + 'static,
+    {
+        self.code = Some(std::sync::Arc::new(f));
+        self
+    }
+
     /// Create a new migration from version, description, and SQL (no down).
     pub fn new(
         version: impl Into<String>,
@@ -44,6 +87,7 @@ impl Migration {
             description: description.into(),
             sql: sql.into(),
             down_sql: String::new(),
+            code: None,
         }
     }
 
@@ -185,12 +229,18 @@ impl MigrationRunner {
                 continue;
             }
 
-            // Execute the migration SQL in a transaction
+            // Execute the migration in a transaction: the Rust body first
+            // (when present), then the literal SQL.
             let mut tx = pool.begin().await.map_err(map_sqlx)?;
-            sqlx::raw_sql(sqlx::AssertSqlSafe(migration.sql.as_str()))
-                .execute(&mut *tx)
-                .await
-                .map_err(map_sqlx)?;
+            if let Some(code) = &migration.code {
+                code(&mut tx).await?;
+            }
+            if !migration.sql.is_empty() {
+                sqlx::raw_sql(sqlx::AssertSqlSafe(migration.sql.as_str()))
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(map_sqlx)?;
+            }
 
             // Record it
             let now = std::time::SystemTime::now()

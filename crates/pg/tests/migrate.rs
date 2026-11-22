@@ -303,3 +303,90 @@ async fn bookkeeping_column_type_is_varchar_and_seconds() {
             .unwrap();
     assert!(ts < 10_000_000_000, "seconds since epoch, got {ts}");
 }
+
+// ── C11: the Rust data-migration code lane ──
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn code_lane_runs_inside_the_migration_transaction() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _code_t")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let runner = MigrationRunner::new(vec![
+        // DDL first, then a Rust body that backfills derived rows.
+        Migration::new(
+            "c001",
+            "create",
+            "CREATE TABLE _code_t (id INT, doubled INT)",
+        )
+        .with_down("DROP TABLE IF EXISTS _code_t"),
+        Migration::new("c002", "backfill", "").with_code(|conn| {
+            Box::pin(async move {
+                sqlx::query("INSERT INTO _code_t VALUES (1, 2), (2, 4), (3, 6)")
+                    .execute(&mut *conn)
+                    .await
+                    .map_err(|e| lacrymira::Error::Db {
+                        kind: "postgres".into(),
+                        message: e.to_string(),
+                        sqlstate: None,
+                    })?;
+                Ok(())
+            })
+        }),
+    ]);
+
+    let applied = runner.up(&pool).await.expect("up");
+    assert_eq!(
+        applied.applied,
+        vec!["c001".to_string(), "c002".to_string()]
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM _code_t")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 3, "the code lane backfilled three rows");
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL with a test PostgreSQL"]
+async fn a_failing_code_body_rolls_back_the_whole_migration() {
+    let pool = fresh_pool().await;
+    sqlx::query("DROP TABLE IF EXISTS _code_fail")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let runner = MigrationRunner::new(vec![
+        Migration::new("f001", "create", "CREATE TABLE _code_fail (id INT)"),
+        Migration::new("f002", "boom", "INSERT INTO _code_fail VALUES (1)").with_code(|_conn| {
+            Box::pin(async move {
+                Err(lacrymira::Error::Config(
+                    "deliberate code-lane failure".into(),
+                ))
+            })
+        }),
+    ]);
+
+    let err = runner.up(&pool).await.expect_err("the code body fails");
+    assert!(
+        err.to_string().contains("deliberate code-lane failure"),
+        "{err}"
+    );
+    // f002's own SQL ran INSIDE the transaction the body failed in, so the
+    // insert rolled back with it; f001 (its own transaction) stays.
+    let recorded: Vec<(String,)> =
+        sqlx::query_as("SELECT version FROM seaql_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].0, "f001");
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM _code_fail")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "the failed migration's insert rolled back");
+}
