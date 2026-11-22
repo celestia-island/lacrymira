@@ -346,6 +346,29 @@ impl From<&Vec<u8>> for Value {
     }
 }
 
+/// Nullable bytea (sealed-secret columns): `None` is SQL NULL, not an empty
+/// blob — the two mean different things to every caller that asks "does this
+/// row carry a credential".
+impl From<&Option<Vec<u8>>> for Value {
+    fn from(v: &Option<Vec<u8>>) -> Self {
+        match v {
+            Some(bytes) => Value::Bytes(bytes.clone()),
+            None => Value::Null,
+        }
+    }
+}
+
+/// Nullable array (a `TEXT[]` column): `None` is SQL NULL, which is distinct
+/// from an empty array.
+impl From<&Option<Vec<String>>> for Value {
+    fn from(v: &Option<Vec<String>>) -> Self {
+        match v {
+            Some(items) => Value::Array(items.iter().map(|s| Value::Text(s.clone())).collect()),
+            None => Value::Null,
+        }
+    }
+}
+
 impl From<&Option<serde_json::Value>> for Value {
     fn from(v: &Option<serde_json::Value>) -> Self {
         match v {
