@@ -934,6 +934,14 @@ impl PgExecutor {
     where
         E: lacrymira::Entity,
     {
+        // A zero-PK entity would pass a 0==0 arity check and degrade into an
+        // unfiltered SELECT returning an arbitrary row (R2 S3 finding).
+        if E::PK_INDICES.is_empty() {
+            return Err(Error::Config(format!(
+                "find_by_pk_parts: {} has no primary-key column; the typed helpers need at least one",
+                E::TABLE
+            )));
+        }
         if parts.len() != E::PK_INDICES.len() {
             return Err(Error::Config(format!(
                 "find_by_pk_parts: {} has {} primary-key column(s) but {} part(s) were given",

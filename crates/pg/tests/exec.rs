@@ -1032,6 +1032,30 @@ async fn update_without_returning_reports_affected() {
     }
 }
 
+/// G-chest-7 delta (R2 S3): a zero-PK entity must not degrade into an
+/// unfiltered SELECT — the guard fires before any SQL runs, so a lazy pool
+/// that never connects proves the point without a server.
+#[tokio::test]
+async fn find_by_pk_parts_rejects_zero_pk_entities() {
+    mod no_pk {
+        use lacrymira::DeriveEntity;
+        #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+        #[lacrymira(table = "_no_pk_probe")]
+        pub struct Model {
+            pub label: String,
+        }
+    }
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgres://lacrymira:no-round-trip@127.0.0.1:1/scratch")
+        .expect("lazy pool does not connect");
+    let executor = lacrymira_pg::PgExecutor::new(pool);
+    let err = executor
+        .find_by_pk_parts::<no_pk::Model>(&[])
+        .await
+        .expect_err("zero-PK entity must be rejected");
+    assert!(matches!(err, lacrymira::Error::Config(_)), "{err:?}");
+}
+
 /// G-chest-7: `find_by_pk_parts` answers composite primary keys through the
 /// typed helpers (the render-shape sibling lives in find_helpers.rs).
 #[tokio::test]
