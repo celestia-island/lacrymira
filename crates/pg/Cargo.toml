@@ -10,9 +10,10 @@ license-file.workspace = true
 
 [dependencies]
 lacrymira = { workspace = true }
-sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json", "rust_decimal"] }
+sqlx = { workspace = true, optional = true, features = ["postgres", "runtime-tokio", "uuid", "json", "rust_decimal", "chrono"] }
 pgvector = { workspace = true, optional = true, features = ["sqlx"] }
 rust_decimal = { version = "^1", optional = true }
+chrono = { version = "^0.4", default-features = false, features = ["clock", "std"] }
 jiff-sqlx = { workspace = true, optional = true, features = ["postgres"] }
 jiff = { workspace = true }
 uuid = { workspace = true }

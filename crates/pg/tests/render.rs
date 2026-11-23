@@ -149,6 +149,7 @@ fn update_with_where() {
         table: "users".into(),
         sets: vec![("degrees".into(), Value::I32(100))],
         filter: Some(Condition::Gt(ColumnRef::new("degrees"), Value::I32(50))),
+        returning: true,
     };
     let r = render(&cmd).unwrap();
     assert!(r.sql.contains(r#"UPDATE "users" SET "degrees" = $1"#));

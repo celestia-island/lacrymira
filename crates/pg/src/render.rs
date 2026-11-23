@@ -228,6 +228,7 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
             table,
             sets,
             filter,
+            returning,
         } => {
             let mut sql = format!("UPDATE {} SET ", quote_ident(table));
             let set_parts: Vec<String> = sets
@@ -243,7 +244,9 @@ pub fn render(cmd: &Command) -> Result<Rendered, lacrymira::Error> {
                 sql.push_str(" WHERE ");
                 sql.push_str(&where_clause);
             }
-            sql.push_str(" RETURNING *");
+            if *returning {
+                sql.push_str(" RETURNING *");
+            }
             Ok(Rendered {
                 sql,
                 params: ctx.params,

@@ -104,6 +104,7 @@ fn command_update_round_trips() {
                 },
                 Value::I32(50),
             )),
+            returning: true,
         },
     );
 }

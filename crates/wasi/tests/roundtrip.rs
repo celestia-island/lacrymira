@@ -130,6 +130,7 @@ fn command_reply_pairs() -> Vec<(Command, Reply)> {
                     },
                     Value::I32(50),
                 )),
+                returning: true,
             },
             Reply::Affected(7),
         ),

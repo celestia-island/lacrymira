@@ -162,9 +162,23 @@ impl PgExecutor {
         match cmd {
             // The renderer appends `RETURNING *` to Insert/Update, so all three
             // statement kinds produce rows.
-            Command::Select { .. } | Command::Insert { .. } | Command::Update { .. } => {
+            Command::Select { .. } | Command::Insert { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
                 rows_to_reply(&rows)
+            }
+            // Update answers Rows when it renders RETURNING, and the plain
+            // affected count when it does not.
+            Command::Update {
+                returning: true, ..
+            } => {
+                let rows: Vec<PgRow> = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+                rows_to_reply(&rows)
+            }
+            Command::Update {
+                returning: false, ..
+            } => {
+                let result = query.execute(&self.pool).await.map_err(map_db_error)?;
+                Ok(Reply::Affected(result.rows_affected()))
             }
             // Aggregate SELECT returns rows like a plain SELECT.
             Command::Aggregate { .. } => {
@@ -293,6 +307,22 @@ fn bind_value<'q>(
             query.bind(parsed)
         }
         Value::Array(items) => bind_array(query, items)?,
+        // Bind NAIVE timestamps as chrono::NaiveDateTime — sqlx maps that
+        // to PG's TIMESTAMP (without zone), so `$n::timestamp` works without
+        // the 22P03 binary mismatch and without a session-timezone hop.
+        Value::NaiveTimestamp(s) => {
+            use std::str::FromStr as _;
+            let dt = chrono::NaiveDateTime::from_str(s)
+                .or_else(|_| chrono::DateTime::parse_from_rfc3339(s).map(|d| d.naive_utc()));
+            match dt {
+                Ok(n) => query.bind(n),
+                Err(_) => {
+                    return Err(Error::Decode(format!(
+                        "invalid naive timestamp parameter {s:?}"
+                    )))
+                }
+            }
+        }
         #[cfg(feature = "decimal")]
         Value::Decimal(s) => {
             use std::str::FromStr as _;
@@ -1123,9 +1153,21 @@ impl PgTransaction {
         let query = build_query(&rendered.sql, &rendered.params)?;
         let tx = self.tx_mut()?;
         match cmd {
-            Command::Select { .. } | Command::Insert { .. } | Command::Update { .. } => {
+            Command::Select { .. } | Command::Insert { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
                 rows_to_reply(&rows)
+            }
+            Command::Update {
+                returning: true, ..
+            } => {
+                let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;
+                rows_to_reply(&rows)
+            }
+            Command::Update {
+                returning: false, ..
+            } => {
+                let result = query.execute(&mut **tx).await.map_err(map_db_error)?;
+                Ok(Reply::Affected(result.rows_affected()))
             }
             Command::Aggregate { .. } => {
                 let rows: Vec<PgRow> = query.fetch_all(&mut **tx).await.map_err(map_db_error)?;

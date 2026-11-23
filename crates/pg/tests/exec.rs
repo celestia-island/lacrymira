@@ -336,6 +336,7 @@ async fn crud_round_trip() {
                 ColumnRef::new("id"),
                 Value::Uuid(id_a.into()),
             )),
+            returning: true,
         })
         .await
         .expect("update");
@@ -923,4 +924,107 @@ async fn aggregate_and_pagination_e2e() {
         .expect("cursor3");
     assert_eq!(batch3.rows.len(), 3);
     assert!(batch3.next.is_none(), "exhausted");
+}
+
+// ── D12: NaiveTimestamp binds straight into TIMESTAMP columns ──
+
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn naive_timestamp_binds_directly_into_timestamp_column() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _naive_ts",
+        "CREATE TABLE _naive_ts (id INT, at TIMESTAMP WITHOUT TIME ZONE)",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    // Bind a NaiveTimestamp straight into the naive column — no
+    // $n::text::timestamp mediation, no session-timezone hop.
+    let insert = lacrymira::Command::Insert {
+        table: "_naive_ts".into(),
+        columns: vec!["id".into(), "at".into()],
+        rows: vec![vec![
+            lacrymira::Value::I32(1),
+            lacrymira::Value::NaiveTimestamp("2026-11-22T12:34:56.789".into()),
+        ]],
+        on_conflict: None,
+    };
+    executor.execute(&insert).await.expect("insert");
+    let readback: String = {
+        let r = executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: "SELECT at::text FROM _naive_ts WHERE id = 1".into(),
+                params: vec![],
+            })
+            .await
+            .expect("read");
+        match r {
+            lacrymira::Reply::Rows { rows, .. } => match &rows[0][0] {
+                lacrymira::Value::Text(s) => s.clone(),
+                _ => panic!("expected text"),
+            },
+            _ => panic!("expected rows"),
+        }
+    };
+    assert!(
+        readback.starts_with("2026-11-22 12:34:56.789"),
+        "naive value round-tripped: {readback}"
+    );
+}
+
+// ── D13: Update returning=false reports Affected ──
+
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn update_without_returning_reports_affected() {
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _aff_t",
+        "CREATE TABLE _aff_t (id INT, v INT)",
+        "INSERT INTO _aff_t VALUES (1, 10), (2, 20), (3, 30)",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    let upd = lacrymira::Command::Update {
+        table: "_aff_t".into(),
+        sets: vec![("v".into(), lacrymira::Value::I32(99))],
+        filter: Some(lacrymira::ColumnRef::new("id").in_(vec![1, 2])),
+        returning: false,
+    };
+    match executor.execute(&upd).await.expect("update") {
+        lacrymira::Reply::Affected(n) => assert_eq!(n, 2, "two rows matched"),
+        other => panic!("expected Affected, got {other:?}"),
+    }
+    // And returning=true still yields rows.
+    let upd2 = lacrymira::Command::Update {
+        table: "_aff_t".into(),
+        sets: vec![("v".into(), lacrymira::Value::I32(100))],
+        filter: Some(lacrymira::ColumnRef::new("id").eq(1)),
+        returning: true,
+    };
+    match executor.execute(&upd2).await.expect("update2") {
+        lacrymira::Reply::Rows { rows, .. } => assert_eq!(rows.len(), 1),
+        other => panic!("expected Rows, got {other:?}"),
+    }
 }
