@@ -42,6 +42,11 @@ pub enum Value {
     /// Behind the `pgvector` feature; stored as its text form `[1,2,3]`.
     #[cfg(feature = "pgvector")]
     Vector(String),
+    /// A NAIVE timestamp (no zone) for PG `timestamp without time zone`
+    /// columns. Binds as TIMESTAMP (not TIMESTAMPTZ), eliminating the
+    /// 22P03 binary-mismatch and the session-timezone dependency that
+    /// `Value::Timestamp` carries when aimed at naive columns.
+    NaiveTimestamp(String),
 }
 
 // ── TryFrom<Value> for common types (used by from_values) ──

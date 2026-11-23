@@ -143,3 +143,41 @@ fn typed_and_or_not() {
     let q = Select::<user::Model>::new().filter(cond);
     assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
+
+// ── D14/D15: no turbofish + prelude import ──
+
+mod prelude_user {
+    // ONE import brings everything: Entity, operators, Select, LockMode…
+    use lacrymira::prelude::*;
+
+    #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+    #[lacrymira(table = "prelude_users")]
+    pub struct Model {
+        #[lacrymira(primary_key)]
+        pub id: i64,
+        pub name: String,
+        pub age: i32,
+    }
+    pub use prelude_users_entity::Column;
+}
+
+#[test]
+fn prelude_brings_the_operators_without_extra_imports() {
+    // Column::Name.eq compiles with ONLY the prelude — no second
+    // `use lacrymira::TypedColumnOps` needed (G-chest-8's silent trap).
+    use lacrymira::prelude::*;
+    let cond = prelude_user::Column::Name.eq("Alice");
+    let q = lacrymira::Select::<prelude_user::Model>::new().filter(cond);
+    assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
+}
+
+#[test]
+fn executor_helpers_infer_e_from_the_select_argument() {
+    // find_all(&select) — the E in Select<E> drives inference; the
+    // turbofish is unnecessary (G-erp-5/G-arona-6).
+    fn takes_select<E: lacrymira::Entity>(s: &lacrymira::Select<E>) -> lacrymira::Select<E> {
+        s.clone_limit()
+    }
+    let s = lacrymira::Select::<prelude_user::Model>::new();
+    let _ = takes_select(&s); // no turbofish anywhere
+}

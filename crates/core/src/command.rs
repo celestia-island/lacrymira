@@ -133,6 +133,9 @@ pub enum Command {
         sets: Vec<(String, Value)>,
         /// Optional filter condition.
         filter: Option<Condition>,
+        /// Whether to append RETURNING * (true → Reply::Rows) or report
+        /// the affected count (false → Reply::Affected).
+        returning: bool,
     },
     /// Delete rows matching a condition.
     Delete {

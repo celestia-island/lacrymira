@@ -50,3 +50,29 @@ pub use value::Value;
 
 // ── Derive macro（用户不再需要单独依赖 lacrymira-macros）──
 pub use lacrymira_macros::Entity as DeriveEntity;
+
+/// Everything a typical consumer needs in ONE import.
+///
+/// ```ignore
+/// use lacrymira::prelude::*;
+/// // Entity, Select, Condition, ColumnRef, Value, Command, Reply,
+/// // TypedColumnOps (the .eq/.gt/... operators), LockMode, Page,
+/// // CursorBatch, AggExpr, Field, InsertPolicy, IndexBuilder — all in.
+/// ```
+pub mod prelude {
+    pub use crate::command::{AggExpr, Command, ConflictAction, Dialect, KvOp, OnConflict};
+    pub use crate::condition::{ColumnRef, Condition, JsonPathBuilder};
+    pub use crate::entity::{ColumnTrait, Entity, JsonColumn, PrimaryKey, VersionColumn};
+    pub use crate::error::Error;
+    pub use crate::field::Field;
+    pub use crate::index::{IndexBuilder, IndexSpec};
+    pub use crate::insert_policy::{CollisionPolicy, InsertPolicy, UuidStrategy};
+    pub use crate::lock::LockMode;
+    pub use crate::reply::Reply;
+    pub use crate::select::{CursorBatch, Page, Select};
+    pub use crate::typed_condition::{
+        JsonPathTyped, TypedColumnName, TypedColumnOps, TypedCondition, TypedJsonColumnOps,
+    };
+    pub use crate::value::Value;
+    pub use crate::DeriveEntity;
+}
