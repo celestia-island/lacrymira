@@ -764,13 +764,16 @@ async fn decimal_numeric_column_round_trips() {
 
 #[cfg(feature = "pgvector")]
 #[tokio::test]
-#[ignore = "requires LACRYMIRA_PG_TEST_URL with a pgvector-enabled PostgreSQL"]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a pgvector-enabled PostgreSQL (pgvector/pgvector:pg16)"]
 async fn vector_column_round_trips() {
     let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
     let executor = lacrymira_pg::PgExecutor::connect(&url)
         .await
         .expect("connect");
     for stmt in [
+        // Self-sufficient lane: the pgvector image ships the extension
+        // available but NOT created in any database.
+        "CREATE EXTENSION IF NOT EXISTS vector",
         "DROP TABLE IF EXISTS _vec_probe",
         "CREATE TABLE _vec_probe (id INT, embedding vector(3))",
     ] {
@@ -1027,4 +1030,96 @@ async fn update_without_returning_reports_affected() {
         lacrymira::Reply::Rows { rows, .. } => assert_eq!(rows.len(), 1),
         other => panic!("expected Rows, got {other:?}"),
     }
+}
+
+/// G-chest-7: `find_by_pk_parts` answers composite primary keys through the
+/// typed helpers (the render-shape sibling lives in find_helpers.rs).
+#[tokio::test]
+#[ignore = "requires LACRYMIRA_PG_TEST_URL with a test PostgreSQL"]
+async fn find_by_pk_parts_composite_e2e() {
+    mod doc_row {
+        use lacrymira::DeriveEntity;
+        #[derive(Debug, Clone, PartialEq, DeriveEntity)]
+        #[lacrymira(table = "_pk_parts_e2e")]
+        pub struct Model {
+            #[lacrymira(primary_key)]
+            pub kind: String,
+            #[lacrymira(primary_key)]
+            pub doc_key: String,
+            pub body: String,
+        }
+    }
+
+    let url = std::env::var("LACRYMIRA_PG_TEST_URL").expect("LACRYMIRA_PG_TEST_URL");
+    let executor = lacrymira_pg::PgExecutor::connect(&url)
+        .await
+        .expect("connect");
+    for stmt in [
+        "DROP TABLE IF EXISTS _pk_parts_e2e",
+        "CREATE TABLE _pk_parts_e2e (\
+         kind TEXT NOT NULL, doc_key TEXT NOT NULL, body TEXT NOT NULL, \
+         PRIMARY KEY (kind, doc_key))",
+    ] {
+        executor
+            .execute(&lacrymira::Command::Sql {
+                dialect: lacrymira::Dialect::Postgres,
+                text: stmt.into(),
+                params: vec![],
+            })
+            .await
+            .expect("setup");
+    }
+    executor
+        .insert::<doc_row::Model>(&doc_row::Model {
+            kind: "page".into(),
+            doc_key: "home".into(),
+            body: "hello".into(),
+        })
+        .await
+        .expect("seed home");
+    executor
+        .insert::<doc_row::Model>(&doc_row::Model {
+            kind: "page".into(),
+            doc_key: "away".into(),
+            body: "other".into(),
+        })
+        .await
+        .expect("seed away");
+
+    // Hit: both parts match the seeded row.
+    let hit = executor
+        .find_by_pk_parts::<doc_row::Model>(&[
+            lacrymira::Value::Text("page".into()),
+            lacrymira::Value::Text("home".into()),
+        ])
+        .await
+        .expect("find_by_pk_parts")
+        .expect("row exists");
+    assert_eq!(hit.body, "hello");
+
+    // Miss: the second part matches no row (the first part alone does).
+    let miss = executor
+        .find_by_pk_parts::<doc_row::Model>(&[
+            lacrymira::Value::Text("page".into()),
+            lacrymira::Value::Text("nope".into()),
+        ])
+        .await
+        .expect("find_by_pk_parts");
+    assert!(miss.is_none());
+
+    // Arity mismatch is a Config error up front, not a wrong query.
+    let err = executor
+        .find_by_pk_parts::<doc_row::Model>(&[lacrymira::Value::Text("page".into())])
+        .await
+        .expect_err("arity mismatch must be rejected");
+    assert!(matches!(err, lacrymira::Error::Config(_)), "{err:?}");
+
+    executor
+        .execute(&lacrymira::Command::Sql {
+            dialect: lacrymira::Dialect::Postgres,
+            text: "DROP TABLE IF EXISTS _pk_parts_e2e".into(),
+            params: vec![],
+        })
+        .await
+        .expect("cleanup");
 }

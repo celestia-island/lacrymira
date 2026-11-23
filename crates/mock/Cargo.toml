@@ -11,5 +11,8 @@ repository.workspace = true
 [dependencies]
 lacrymira = { workspace = true }
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 tokio = { version = "^1", features = ["rt", "macros"] }

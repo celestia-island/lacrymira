@@ -922,6 +922,33 @@ impl PgExecutor {
         self.find_one(&select).await
     }
 
+    /// Fetch a model by its primary key, single- or multi-column (G-chest-7).
+    ///
+    /// `parts` carries one [`lacrymira::Value`] per primary-key column in
+    /// declaration order; the parts are AND-ed into one equality-per-column
+    /// filter. `find_by_pk` stays the single-column ergonomic form.
+    pub async fn find_by_pk_parts<E>(
+        &self,
+        parts: &[lacrymira::Value],
+    ) -> Result<Option<E::Model>, Error>
+    where
+        E: lacrymira::Entity,
+    {
+        if parts.len() != E::PK_INDICES.len() {
+            return Err(Error::Config(format!(
+                "find_by_pk_parts: {} has {} primary-key column(s) but {} part(s) were given",
+                E::TABLE,
+                E::PK_INDICES.len(),
+                parts.len()
+            )));
+        }
+        let mut select = lacrymira::Select::<E>::new();
+        for (&idx, part) in E::PK_INDICES.iter().zip(parts.iter()) {
+            select = select.filter(lacrymira::ColumnRef::new(E::COLUMNS[idx]).eq(part.clone()));
+        }
+        self.find_one(&select).await
+    }
+
     /// Insert a full model and return the stored row as a model.
     pub async fn insert<E>(&self, model: &E::Model) -> Result<E::Model, Error>
     where

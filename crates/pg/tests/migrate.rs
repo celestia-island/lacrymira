@@ -2,9 +2,11 @@
 //!
 //! These tests require a live PostgreSQL database. Run with:
 //! ```sh
-//! DATABASE_URL=postgres://localhost/lacrymira_test cargo test -p lacrymira-pg --test migrate -- --ignored
+//! DATABASE_URL=postgres://localhost/lacrymira_test cargo test -p lacrymira-pg --test migrate -- --ignored --test-threads=1
 //! ```
-//! (The `--ignored` flag is needed because they are tagged `#[ignore]` by default.)
+//! (The `--ignored` flag is needed because they are tagged `#[ignore]` by default.
+//! `--test-threads=1` is required: every test's `fresh_pool` DROPs the shared
+//! bookkeeping tables, so parallel runs stomp each other.)
 
 use lacrymira_pg::{Migration, MigrationRunner};
 

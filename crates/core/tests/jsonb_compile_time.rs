@@ -109,3 +109,26 @@ fn non_json_entity_select_with_filter() {
         .filter(without_json::Column::Name.like("%x%"));
     assert!(matches!(q.to_command(), lacrymira::Command::Select { .. }));
 }
+
+// ── G-erp-3: owned JSON From impls (bind positions) ──
+
+#[test]
+fn owned_json_value_into_value() {
+    let v: lacrymira::Value = serde_json::json!({"a": 1}).into();
+    match v {
+        lacrymira::Value::Json(s) => {
+            // And the decode direction round-trips the same payload.
+            let back: serde_json::Value = lacrymira::Value::Json(s.clone()).try_into().unwrap();
+            assert_eq!(back, serde_json::json!({"a": 1}));
+        }
+        other => panic!("expected Json, got {other:?}"),
+    }
+}
+
+#[test]
+fn owned_option_json_value_into_value() {
+    let some: lacrymira::Value = Some(serde_json::json!([1, 2])).into();
+    assert!(matches!(some, lacrymira::Value::Json(_)));
+    let none: lacrymira::Value = (None::<serde_json::Value>).into();
+    assert!(matches!(none, lacrymira::Value::Null));
+}
