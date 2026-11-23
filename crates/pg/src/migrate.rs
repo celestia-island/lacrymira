@@ -115,7 +115,6 @@ pub struct MigrationResult {
 }
 
 impl MigrationRunner {
-    /// Create a runner with the given migrations (will be sorted by version).
     /// Build a runner that applies migrations **in the given order**.
     ///
     /// The runner does NOT sort — declaration order is execution order,

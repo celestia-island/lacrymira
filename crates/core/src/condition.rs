@@ -286,6 +286,14 @@ impl From<&serde_json::Value> for Value {
     }
 }
 
+// G-erp-3: the owned forms, so `json!(...).into()` resolves at hand-built
+// Command bind positions without spelling `Value::Json(v.to_string())`.
+impl From<serde_json::Value> for Value {
+    fn from(v: serde_json::Value) -> Self {
+        Value::Json(v.to_string())
+    }
+}
+
 impl From<&uuid::Uuid> for Value {
     fn from(v: &uuid::Uuid) -> Self {
         Value::Uuid(v.to_string())
@@ -371,6 +379,14 @@ impl From<&Option<Vec<String>>> for Value {
 
 impl From<&Option<serde_json::Value>> for Value {
     fn from(v: &Option<serde_json::Value>) -> Self {
+        match v {
+            Some(j) => Value::Json(j.to_string()),
+            None => Value::Null,
+        }
+    }
+}
+impl From<Option<serde_json::Value>> for Value {
+    fn from(v: Option<serde_json::Value>) -> Self {
         match v {
             Some(j) => Value::Json(j.to_string()),
             None => Value::Null,
