@@ -16,21 +16,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish crates in dependency order
         env:
-          # Isolated CARGO_HOME: the runner's own cargo config replaces
-          # crates-io with a mirror registry, and `cargo publish` refuses to
-          # publish through a non-remote replacement source ("crates-io is
-          # replaced with non-remote-registry source"). A clean home resolves
-          # from the real sparse index; deps re-download cold (fine inside
-          # the 30-minute budget).
+          # The runner carries an rsproxy source replacement for crates-io on
+          # the config chain above the checkout (a CARGO_HOME override alone
+          # does not shadow it), and cargo publish refuses a non-remote
+          # replacement source. `--registry crates-io` publishes to the real
+          # registry regardless of the replacement — cargo's own error
+          # message names this flag. The isolated CARGO_HOME keeps the
+          # runner's caches out of the way; deps re-download cold.
           CARGO_HOME: ${{ runner.temp }}/publish-cargo-home
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRIES_CRATES_IO_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           set -e
           mkdir -p "$CARGO_HOME"
           for crate in lacrymira-macros lacrymira lacrymira-mock lacrymira-redb lacrymira-wasi lacrymira-pg; do
             echo "=== publishing $crate ==="
             log="$RUNNER_TEMP/publish-$crate.log"
-            if cargo publish -p "$crate" >"$log" 2>&1; then
+            if cargo publish -p "$crate" --registry crates-io >"$log" 2>&1; then
               echo "$crate published"
               sleep 20
             elif grep -qi "already exists" "$log"; then
