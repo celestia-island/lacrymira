@@ -11,8 +11,11 @@
 <br />
 
 <div align="center">
-  <a href="https://github.com/celestia-island/lacrymira/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/lacrymira/ci.yml?branch=dev&label=CI" alt="CI" />
+  <a href="https://crates.io/crates/lacrymira">
+    <img src="https://img.shields.io/crates/v/lacrymira" alt="crates.io" />
+  </a>
+  <a href="https://docs.rs/lacrymira">
+    <img src="https://img.shields.io/docsrs/lacrymira" alt="docs.rs" />
   </a>
   <a href="https://github.com/celestia-island/lacrymira/actions/workflows/depspec-lint.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/lacrymira/depspec-lint.yml?branch=master&label=depspec" alt="Depspec" />
@@ -22,9 +25,6 @@
   </a>
   <a href="https://github.com/casey/just">
     <img src="https://img.shields.io/badge/built%20with-just-blue" alt="Built with just" />
-  </a>
-  <a href="https://github.com/celestia-island/lacrymira">
-    <img src="https://img.shields.io/badge/github-celestia--island%2Flacrymira-blue" alt="GitHub" />
   </a>
 </div>
 
@@ -38,9 +38,15 @@
 
 ## Overview
 
-Lacrymira is the Celestia family's data access layer: one typed command surface
+Lacrymira is a typed ORM and data-access layer for Rust: one command surface
 (`Command` / `Reply`) over PostgreSQL and redb, designed to run both natively
-on the host and inside `wasm32-wasip2` components.
+on the host and inside `wasm32-wasip2` components — the same binary shape for
+a plain service and a sandboxed plugin.
+
+It is developed as part of the [Celestia](https://github.com/celestia-island)
+project, where it serves as the shared data layer across several production
+services, but it is an ordinary published crate with no framework lock-in:
+bring your own tables, derive your entities, talk SQL.
 
 Named after [Lacrymira](https://arcaea.fandom.com/wiki/Lacrymira_(Ascendant_-_8th_Seeker))
 (Ascendant — 8th Seeker) from Arcaea Act II, the keeper of sculpted memories.
