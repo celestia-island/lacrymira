@@ -28,12 +28,6 @@
   </a>
 </div>
 
-<div align="center">
-
-**English**
-
-</div>
-
 ---
 
 ## Overview
